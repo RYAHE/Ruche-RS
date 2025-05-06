@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Ruche PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "ruche_db",
+      "Username": "ruche_user",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpassfile"
+    }
+  }
+} 

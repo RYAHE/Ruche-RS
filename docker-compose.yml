@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # Service PostgreSQL pour la base de données
+  postgres:
+    image: postgres:14-alpine
+    container_name: ruche_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ruche_user
+      POSTGRES_PASSWORD: ruche_password
+      POSTGRES_DB: ruche_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_LISTEN_ADDRESSES: "*"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ruche_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ruche_user -d ruche_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Service pgAdmin pour administrer la base de données via une interface web
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: ruche_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ruche.fr
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ruche_network
+
+  # Service backend pour l'API Node.js
+  backend:
+    image: node:16
+    container_name: ruche_backend
+    restart: always
+    working_dir: /app
+    command: sh -c "npm uninstall bcrypt && npm install bcryptjs && npm run dev"
+    ports:
+      - "8080:3000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_USER=ruche_user
+      - DB_PASSWORD=ruche_password
+      - DB_NAME=ruche_db
+      - DB_PORT=5432
+      - JWT_SECRET=ruche_secret_jwt_a_changer_en_production
+    networks:
+      - ruche_network
+    # Ajout d'un healthcheck pour le backend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    name: ruche_postgres_data
+
+networks:
+  ruche_network:
+    name: ruche_network
+    driver: bridge 
