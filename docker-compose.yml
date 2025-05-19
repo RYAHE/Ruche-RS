@@ -17,6 +17,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/migrations:/docker-entrypoint-initdb.d
     networks:
       - ruche_network
     healthcheck:
@@ -25,45 +26,46 @@ services:
       timeout: 5s
       retries: 5
 
-  # Service pgAdmin pour administrer la base de données via une interface web
+  # Service pgAdmin pour la gestion de la base de données
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:latest
     container_name: ruche_pgadmin
     restart: always
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@ruche.fr
-      PGADMIN_DEFAULT_PASSWORD: admin_password
-      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
-      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_DEFAULT_PASSWORD: ruche_admin
+      PGADMIN_LISTEN_PORT: 5050
     ports:
-      - "5050:80"
+      - "5050:5050"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     networks:
       - ruche_network
 
-  # Service backend pour l'API Node.js
+  # Service Backend Node.js
   backend:
-    image: node:16
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: ruche_backend
     restart: always
-    working_dir: /app
-    command: sh -c "npm uninstall bcrypt && npm install bcryptjs && npm run dev"
     ports:
       - "8080:3000"
     volumes:
       - ./backend:/app
+      - /app/node_modules
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     environment:
       - NODE_ENV=development
       - PORT=3000
-      - DB_HOST=postgres
       - DB_USER=ruche_user
-      - DB_PASSWORD=ruche_password
+      - DB_HOST=postgres
       - DB_NAME=ruche_db
+      - DB_PASSWORD=ruche_password
       - DB_PORT=5432
       - JWT_SECRET=ruche_secret_jwt_a_changer_en_production
     networks:
@@ -75,10 +77,33 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+      
+  # Service Frontend NuxtJS
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ruche_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - API_URL=http://backend:3000/api
+    networks:
+      - ruche_network
 
 volumes:
   postgres_data:
     name: ruche_postgres_data
+  pgadmin_data:
+    name: ruche_pgadmin_data
 
 networks:
   ruche_network:
