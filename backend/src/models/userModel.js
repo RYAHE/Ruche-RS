@@ -34,10 +34,20 @@ const userModel = {
 
     // Trouver un utilisateur par email
     async findByEmail(email) {
-        //requete pour trouver un utilisateur par email
-        const query = 'SELECT * FROM utilisateurs WHERE email = $1';
-        const result = await db.query(query, [email]);
-        return result.rows[0];
+        try {
+            const result = await db.query(
+                'SELECT * FROM utilisateurs WHERE email = $1',
+                [email]
+            );
+
+            console.log("Recherche utilisateur par email:", email);
+            console.log("Résultat:", result.rows.length > 0 ? "Utilisateur trouvé" : "Utilisateur non trouvé");
+
+            return result.rows[0];
+        } catch (error) {
+            console.error('Erreur lors de la recherche d\'utilisateur par email:', error);
+            throw error;
+        }
     },
 
     // Trouver un utilisateur par nom d'utilisateur

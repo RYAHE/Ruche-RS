@@ -5,20 +5,15 @@
       <i class="fas fa-honeycomb"></i>
       <span>Ruche</span>
     </div>
-    
+
     <!-- Barre de recherche -->
     <div class="search-bar">
-      <input 
-        type="text" 
-        v-model="searchQuery" 
-        @keyup.enter="search"
-        placeholder="Rechercher dans la ruche..." 
-      />
+      <input type="text" v-model="searchQuery" @keyup.enter="search" placeholder="Rechercher dans la ruche..." />
       <button @click="search" class="search-btn">
         <i class="fas fa-search"></i>
       </button>
     </div>
-    
+
     <!-- Sélecteur de catégorie -->
     <div class="category-filter">
       <label for="categoryFilter">Catégorie :</label>
@@ -29,7 +24,7 @@
         </option>
       </select>
     </div>
-    
+
     <!-- Actions de navigation -->
     <div class="nav-actions">
       <!-- Boutons d'authentification (si non connecté) -->
@@ -37,7 +32,7 @@
         <button class="login-btn" @click="$router.push('/auth/login')">Connexion</button>
         <button class="register-btn" @click="$router.push('/auth/register')">Inscription</button>
       </div>
-      
+
       <!-- Profil utilisateur (si connecté) -->
       <div class="user-profile" v-else>
         <div class="user-menu-trigger" @click="toggleUserMenu">
@@ -45,7 +40,7 @@
           <span class="username">{{ $auth.user.username }}</span>
           <i class="fas fa-chevron-down"></i>
         </div>
-        
+
         <!-- Menu utilisateur -->
         <div class="user-menu" v-if="showUserMenu">
           <div class="user-menu-header">
@@ -55,7 +50,7 @@
               <span class="user-email">{{ $auth.user.email }}</span>
             </div>
           </div>
-          
+
           <div class="user-menu-items">
             <button class="menu-item" @click="navigateTo('/profile')">
               <i class="fas fa-id-card"></i>
@@ -91,7 +86,7 @@ export default {
       showUserMenu: false
     }
   },
-  
+
   async mounted() {
     try {
       const response = await this.$axios.get('/categories')
@@ -101,14 +96,14 @@ export default {
       this.$toast.error('Impossible de charger les catégories')
     }
   },
-  
+
   methods: {
     search() {
       if (this.searchQuery.trim()) {
         this.$router.push(`/search?q=${encodeURIComponent(this.searchQuery.trim())}`)
       }
     },
-    
+
     filterByCategory() {
       if (this.selectedCategory === 'all') {
         this.$router.push('/')
@@ -116,16 +111,16 @@ export default {
         this.$router.push(`/category/${this.selectedCategory}`)
       }
     },
-    
+
     toggleUserMenu() {
       this.showUserMenu = !this.showUserMenu
     },
-    
+
     navigateTo(path) {
       this.showUserMenu = false
       this.$router.push(path)
     },
-    
+
     async logout() {
       try {
         await this.$auth.logout()
@@ -195,7 +190,8 @@ export default {
   border: none;
 }
 
-.auth-buttons button, .menu-item {
+.auth-buttons button,
+.menu-item {
   padding: 0.5rem 1rem;
   border-radius: 20px;
   border: none;
@@ -294,15 +290,16 @@ export default {
     flex-wrap: wrap;
     padding: 0.5rem;
   }
-  
-  .search-bar, .category-filter {
+
+  .search-bar,
+  .category-filter {
     order: 3;
     width: 100%;
     margin-top: 0.5rem;
   }
-  
+
   .nav-actions {
     margin-left: auto;
   }
 }
-</style> 
+</style>

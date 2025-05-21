@@ -1,35 +1,39 @@
 export default function ({ $axios, redirect, store, $toast }) {
-    // Intercepteur de requête
+    // Configuration de l'URL de base pour les requêtes côté client
+    if (process.client) {
+        $axios.defaults.baseURL = 'http://localhost:8080/api';
+    }
+
+    // Intercepteur pour les requêtes
     $axios.onRequest(config => {
-        console.log('Requête envoyée vers ' + config.url)
-        return config
-    })
+        console.log('Requête envoyée vers ' + config.url);
+        return config;
+    });
 
-    // Intercepteur d'erreur
+    // Intercepteur pour les réponses
+    $axios.onResponse(response => {
+        return response;
+    });
+
+    // Intercepteur pour les erreurs
     $axios.onError(error => {
-        const code = parseInt(error.response && error.response.status)
-
-        if (code === 401) {
-            // Erreur d'authentification
-            $toast.error('Session expirée. Veuillez vous reconnecter.')
-            redirect('/auth/login')
-        }
-
-        if (code === 403) {
-            // Accès non autorisé
-            $toast.error('Vous n\'avez pas les droits nécessaires pour cette action.')
-        }
+        const code = parseInt(error.response && error.response.status);
 
         if (code === 404) {
-            // Ressource non trouvée
-            $toast.error('La ressource demandée n\'existe pas.')
+            console.error('Ressource non trouvée:', error.config.url);
+            $toast.error('Ressource non trouvée');
         }
 
-        if (code === 500) {
-            // Erreur serveur
-            $toast.error('Une erreur est survenue sur le serveur. Veuillez réessayer plus tard.')
+        if (code === 401 || code === 403) {
+            console.error('Non autorisé');
+            $toast.error('Vous n\'êtes pas autorisé à effectuer cette action');
+
+            // Si l'utilisateur n'est pas authentifié, le rediriger vers la page de connexion
+            if (store.state.auth && !store.state.auth.loggedIn) {
+                redirect('/auth/login');
+            }
         }
 
-        return Promise.reject(error)
-    })
+        return Promise.reject(error);
+    });
 } 

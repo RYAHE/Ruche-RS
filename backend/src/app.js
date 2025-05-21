@@ -13,8 +13,19 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true // Ajout de credentials pour résoudre les problèmes CORS
+}));
 app.use(express.json());
+
+// Ajouter un middleware de journalisation pour déboguer les requêtes
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+});
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
@@ -45,8 +56,10 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serveur démarré et accessible à http://localhost:${PORT}/`);
     console.log(`Routes disponibles:`);
     console.log(`- GET / : Page d'accueil`);
-    console.log(`- GET /api/auth/hello : Hello World`);
+    console.log(`- GET /test : Test simple`);
+    console.log(`- GET /api/categories : Liste des catégories`);
+    console.log(`- GET /api/posts : Liste des posts`);
     console.log(`- POST /api/auth/register : Inscription`);
     console.log(`- POST /api/auth/login : Connexion`);
     console.log(`Serveur démarré sur le port ${PORT}`);
-});
+}); 

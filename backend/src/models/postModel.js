@@ -4,29 +4,21 @@ const db = require('../config/db');
 //creation du model post
 const postModel = {
     // Créer un nouveau post (version simplifiée pour débogage)
-    async create(titre, contenu, utilisateurId, categorieId, estAnonyme = false) {
+    async create(titre, contenu, utilisateur_id, categorie_id) {
         try {
-            console.log("postModel.create - Paramètres:", {
-                titre,
-                contenu: contenu.substring(0, 30) + "...",
-                utilisateurId,
-                categorieId,
-                estAnonyme
-            });
-
             const query = `
-                INSERT INTO posts (titre, contenu, utilisateur_id, categorie_id, est_anonyme)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING id, titre, contenu, date_creation, est_anonyme, categorie_id
+                INSERT INTO posts (titre, contenu, utilisateur_id, categorie_id)
+                VALUES ($1, $2, $3, $4)
+                RETURNING *
             `;
 
-            console.log("Exécution de la requête SQL");
-            const result = await db.query(query, [titre, contenu, utilisateurId, categorieId, estAnonyme]);
-            console.log("Résultat de la requête:", result.rows[0]);
+            const result = await db.query(query, [titre, contenu, utilisateur_id, categorie_id]);
+
+            console.log("Résultat de la création du post:", result.rows[0]);
 
             return result.rows[0];
         } catch (error) {
-            console.error('Erreur détaillée dans postModel.create:', error);
+            console.error('Erreur lors de la création du post:', error);
             throw error;
         }
     },

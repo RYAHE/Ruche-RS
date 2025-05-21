@@ -287,6 +287,65 @@ const postController = {
             console.error('Erreur lors de la recherche de posts:', error);
             res.status(500).json({ message: 'Erreur serveur lors de la recherche de posts' });
         }
+    },
+
+    // Récupérer tous les posts avec des logs pour le débogage
+    async getAllPosts(req, res) {
+        try {
+            const { page = 1, limit = 10, category, search } = req.query;
+            console.log("Requête de posts avec paramètres:", { page, limit, category, search });
+
+            const posts = await postModel.getAll(page, limit, category, search);
+            console.log("Posts récupérés:", posts.length);
+
+            res.status(200).json({
+                message: 'Posts récupérés avec succès',
+                page: parseInt(page),
+                limit: parseInt(limit),
+                posts: posts
+            });
+        } catch (error) {
+            console.error('Erreur lors de la récupération des posts:', error);
+            res.status(500).json({ message: 'Erreur serveur' });
+        }
+    },
+
+    // Méthode de création de post
+    async createPost(req, res) {
+        try {
+            const { titre, contenu, categorie_id } = req.body;
+
+            console.log("Tentative de création de post:", { titre, contenu, categorie_id });
+
+            // Validation des données
+            if (!titre || !contenu || !categorie_id) {
+                console.log("Données manquantes:", { titre: !!titre, contenu: !!contenu, categorie_id: !!categorie_id });
+                return res.status(400).json({ message: 'Titre, contenu et catégorie sont requis' });
+            }
+
+            // Puisque nous avons désactivé le middleware d'authentification,
+            // nous utilisons un utilisateur fictif pour le débogage
+            let utilisateur_id;
+            if (req.user) {
+                utilisateur_id = req.user.id;
+            } else {
+                // Utilisateur fictif pour le débogage
+                utilisateur_id = 1; // Assurez-vous que cet ID existe dans votre base de données
+                console.log("Utilisation d'un utilisateur fictif pour la création du post:", utilisateur_id);
+            }
+
+            // Créer le post
+            const post = await postModel.create(titre, contenu, utilisateur_id, categorie_id);
+            console.log("Post créé avec succès:", { id: post.id, titre: post.titre });
+
+            res.status(201).json({
+                message: 'Post créé avec succès',
+                post
+            });
+        } catch (error) {
+            console.error('Erreur lors de la création du post:', error);
+            res.status(500).json({ message: 'Erreur serveur lors de la création du post' });
+        }
     }
 };
 

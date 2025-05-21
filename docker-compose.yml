@@ -33,7 +33,7 @@ services:
     restart: always
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@ruche.fr
-      PGADMIN_DEFAULT_PASSWORD: ruche_admin
+      PGADMIN_DEFAULT_PASSWORD: ruche_password
       PGADMIN_LISTEN_PORT: 5050
     ports:
       - "5050:5050"
@@ -96,6 +96,7 @@ services:
       - HOST=0.0.0.0
       - PORT=3000
       - API_URL=http://backend:3000/api
+      - BROWSER_BASE_URL=http://localhost:8080/api
     networks:
       - ruche_network
 

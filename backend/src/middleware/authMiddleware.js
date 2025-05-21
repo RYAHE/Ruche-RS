@@ -1,44 +1,34 @@
 //importation du module jwt
 const jwt = require('jsonwebtoken');
+const userModel = require('../models/userModel');
 
 //creation du middleware d'authentification
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     try {
-        // Récupérer le token du header Authorization
+        // Vérifier si le token est présent dans les headers
         const authHeader = req.headers.authorization;
-
-        // Déboguer les headers reçus
-        console.log('Headers reçus:', req.headers);
-
-        //si le token n'est pas présent ou ne commence pas par Bearer
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            console.log('Header Authorization invalide:', authHeader);
-            //retour d'une erreur 401
-            return res.status(401).json({ message: 'Accès non autorisé' });
+            return res.status(401).json({ message: 'Accès non autorisé. Token manquant.' });
         }
 
+        // Extraire le token
         const token = authHeader.split(' ')[1];
-        console.log('Token extrait:', token.substring(0, 20) + '...');
 
-        // Vérifier le token
-        try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'votre_secret_jwt');
-            console.log('Token décodé:', decoded);
+        // Vérifier et décoder le token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            // Ajouter les informations de l'utilisateur à la requête
-            req.user = decoded;
-
-            //passage au middleware suivant
-            next();
-        } catch (jwtError) {
-            console.error('Erreur de vérification JWT:', jwtError);
-            return res.status(401).json({ message: 'Token invalide ou expiré' });
+        // Récupérer l'utilisateur
+        const user = await userModel.getById(decoded.userId);
+        if (!user) {
+            return res.status(401).json({ message: 'Utilisateur non trouvé.' });
         }
+
+        // Ajouter l'utilisateur à la requête
+        req.user = user;
+        next();
     } catch (error) {
-        //affichage de l'erreur
         console.error('Erreur d\'authentification:', error);
-        //retour d'une erreur 401
-        res.status(401).json({ message: 'Token invalide ou expiré' });
+        return res.status(401).json({ message: 'Token invalide ou expiré.' });
     }
 };
 

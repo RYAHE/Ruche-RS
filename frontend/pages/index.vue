@@ -2,12 +2,12 @@
   <div class="home-page">
     <div class="posts-container">
       <h1>Fil d'actualité</h1>
-      
+
       <div v-if="loading" class="loading">
         <i class="fas fa-spinner fa-spin"></i>
         <span>Chargement des posts...</span>
       </div>
-      
+
       <div v-else-if="posts.length === 0" class="no-posts">
         <i class="fas fa-comment-slash"></i>
         <p>Aucun post à afficher pour le moment</p>
@@ -15,64 +15,41 @@
           Créer le premier post
         </button>
       </div>
-      
+
       <div v-else>
-        <post-card 
-          v-for="post in posts" 
-          :key="post.id" 
-          :post="post"
-          @edit="editPost"
-          @delete="confirmDeletePost"
-        />
-        
+        <post-card v-for="post in posts" :key="post.id" :post="post" @edit="editPost" @delete="confirmDeletePost" />
+
         <div class="pagination">
-          <button 
-            class="prev-page" 
-            :disabled="currentPage <= 1"
-            @click="changePage(currentPage - 1)"
-          >
+          <button class="prev-page" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">
             <i class="fas fa-chevron-left"></i> Précédent
           </button>
-          
+
           <span class="page-info">Page {{ currentPage }} sur {{ totalPages }}</span>
-          
-          <button 
-            class="next-page" 
-            :disabled="currentPage >= totalPages"
-            @click="changePage(currentPage + 1)"
-          >
+
+          <button class="next-page" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">
             Suivant <i class="fas fa-chevron-right"></i>
           </button>
         </div>
       </div>
     </div>
-    
+
     <!-- Bouton pour créer un nouveau post (visible seulement si connecté) -->
-    <button 
-      v-if="$auth.loggedIn" 
-      class="new-post-btn" 
-      @click="showNewPostModal = true"
-      title="Créer un nouveau post"
-    ></button>
-    
+    <button v-if="$auth.loggedIn" class="new-post-btn" @click="showNewPostModal = true"
+      title="Créer un nouveau post"></button>
+
     <!-- Modal pour créer un nouveau post -->
     <div v-if="showNewPostModal" class="modal" id="newPostModal">
       <div class="modal-content">
         <span class="close-modal" @click="showNewPostModal = false">&times;</span>
         <h2>Nouveau Post</h2>
-        
+
         <div class="post-editor">
           <div class="form-group">
             <label for="postTitle">Titre</label>
-            <input 
-              type="text" 
-              id="postTitle" 
-              v-model="newPost.titre" 
-              placeholder="Titre de votre post"
-              maxlength="255"
-            />
+            <input type="text" id="postTitle" v-model="newPost.titre" placeholder="Titre de votre post"
+              maxlength="255" />
           </div>
-          
+
           <div class="category-selector">
             <label for="postCategory">Catégorie :</label>
             <select id="postCategory" v-model="newPost.categorieId">
@@ -81,57 +58,41 @@
               </option>
             </select>
           </div>
-          
+
           <div class="editor-toolbar">
             <div class="char-counter" :class="getCounterClass">
               {{ newPost.contenu.length }}/{{ maxContentLength }}
             </div>
           </div>
-          
-          <textarea 
-            v-model="newPost.contenu"
-            placeholder="Que voulez-vous partager ?"
-            :maxlength="maxContentLength"
-          ></textarea>
-          
+
+          <textarea v-model="newPost.contenu" placeholder="Que voulez-vous partager ?"
+            :maxlength="maxContentLength"></textarea>
+
           <div class="anonymous-option">
-            <input 
-              type="checkbox" 
-              id="anonymousPost" 
-              v-model="newPost.estAnonyme"
-            />
+            <input type="checkbox" id="anonymousPost" v-model="newPost.estAnonyme" />
             <label for="anonymousPost">Poster anonymement</label>
           </div>
         </div>
-        
-        <button 
-          class="submit-post-btn" 
-          :disabled="!isPostValid"
-          @click="createPost"
-        >
+
+        <button class="submit-post-btn" :disabled="!isPostValid" @click="createPost">
           Publier
         </button>
       </div>
     </div>
-    
+
     <!-- Modal pour éditer un post -->
     <div v-if="showEditModal" class="modal" id="editPostModal">
       <div class="modal-content">
         <span class="close-modal" @click="showEditModal = false">&times;</span>
         <h2>Modifier le Post</h2>
-        
+
         <div class="post-editor">
           <div class="form-group">
             <label for="editPostTitle">Titre</label>
-            <input 
-              type="text" 
-              id="editPostTitle" 
-              v-model="editingPost.titre" 
-              placeholder="Titre de votre post"
-              maxlength="255"
-            />
+            <input type="text" id="editPostTitle" v-model="editingPost.titre" placeholder="Titre de votre post"
+              maxlength="255" />
           </div>
-          
+
           <div class="category-selector">
             <label for="editPostCategory">Catégorie :</label>
             <select id="editPostCategory" v-model="editingPost.categorieId">
@@ -140,44 +101,33 @@
               </option>
             </select>
           </div>
-          
+
           <div class="editor-toolbar">
             <div class="char-counter" :class="getEditCounterClass">
               {{ editingPost.contenu.length }}/{{ maxContentLength }}
             </div>
           </div>
-          
-          <textarea 
-            v-model="editingPost.contenu"
-            placeholder="Que voulez-vous partager ?"
-            :maxlength="maxContentLength"
-          ></textarea>
-          
+
+          <textarea v-model="editingPost.contenu" placeholder="Que voulez-vous partager ?"
+            :maxlength="maxContentLength"></textarea>
+
           <div class="anonymous-option">
-            <input 
-              type="checkbox" 
-              id="editAnonymousPost" 
-              v-model="editingPost.estAnonyme"
-            />
+            <input type="checkbox" id="editAnonymousPost" v-model="editingPost.estAnonyme" />
             <label for="editAnonymousPost">Poster anonymement</label>
           </div>
-          
+
           <div class="edit-info">
             <i class="fas fa-info-circle"></i>
             <span>La modification sera visible pour tous les utilisateurs.</span>
           </div>
         </div>
-        
-        <button 
-          class="submit-post-btn" 
-          :disabled="!isEditValid"
-          @click="updatePost"
-        >
+
+        <button class="submit-post-btn" :disabled="!isEditValid" @click="updatePost">
           Mettre à jour
         </button>
       </div>
     </div>
-    
+
     <!-- Modal de confirmation de suppression -->
     <div v-if="showDeleteModal" class="modal delete-confirmation-modal">
       <div class="modal-content">
@@ -193,7 +143,12 @@
 </template>
 
 <script>
+import PostCard from '~/components/PostCard.vue'
+
 export default {
+  components: {
+    PostCard
+  },
   data() {
     return {
       posts: [],
@@ -222,27 +177,27 @@ export default {
       maxContentLength: 5000
     }
   },
-  
+
   computed: {
     isPostValid() {
-      return this.newPost.titre.trim() && 
-             this.newPost.contenu.trim() && 
-             this.newPost.categorieId
+      return this.newPost.titre.trim() &&
+        this.newPost.contenu.trim() &&
+        this.newPost.categorieId
     },
-    
+
     isEditValid() {
-      return this.editingPost.titre.trim() && 
-             this.editingPost.contenu.trim() && 
-             this.editingPost.categorieId
+      return this.editingPost.titre.trim() &&
+        this.editingPost.contenu.trim() &&
+        this.editingPost.categorieId
     },
-    
+
     getCounterClass() {
       const length = this.newPost.contenu.length
       if (length > this.maxContentLength * 0.9) return 'limit-near'
       if (length >= this.maxContentLength) return 'limit-reached'
       return ''
     },
-    
+
     getEditCounterClass() {
       const length = this.editingPost.contenu.length
       if (length > this.maxContentLength * 0.9) return 'limit-near'
@@ -250,40 +205,57 @@ export default {
       return ''
     }
   },
-  
+
   async mounted() {
     await Promise.all([
       this.loadPosts(),
       this.loadCategories()
     ])
   },
-  
+
   methods: {
     async loadPosts() {
-      this.loading = true
+      this.loading = true;
       try {
-        const response = await this.$axios.get('/posts', {
+        console.log("Tentative de récupération des posts...");
+        const response = await this.$axios.$get('/posts', {
           params: {
             page: this.currentPage,
-            limit: this.limit
+            limit: this.limit,
+            category: this.selectedCategory,
+            search: this.searchQuery
           }
-        })
-        
-        this.posts = response.data.posts
-        this.totalPages = Math.ceil(response.data.totalItems / this.limit) || 1
+        });
+
+        console.log("Réponse complète:", response);
+
+        // Vérifiez la structure de la réponse
+        if (response && response.posts) {
+          this.posts = response.posts;
+          this.totalPages = Math.ceil(response.totalItems / this.limit) || 1;
+        } else if (Array.isArray(response)) {
+          // Si la réponse est directement un tableau de posts
+          this.posts = response;
+          this.totalPages = 1;
+        } else {
+          console.error("Format de réponse inattendu:", response);
+          this.posts = [];
+          this.totalPages = 1;
+        }
       } catch (error) {
-        console.error('Erreur lors du chargement des posts:', error)
-        this.$toast.error('Impossible de charger les posts')
+        console.error("Erreur lors de la récupération des posts:", error);
+        this.$toast.error('Impossible de charger les posts');
+        this.posts = [];
       } finally {
-        this.loading = false
+        this.loading = false;
       }
     },
-    
+
     async loadCategories() {
       try {
         const response = await this.$axios.get('/categories')
         this.categories = response.data.categories
-        
+
         // Définir la catégorie par défaut pour le nouveau post
         if (this.categories.length > 0 && !this.newPost.categorieId) {
           this.newPost.categorieId = this.categories[0].id
@@ -293,17 +265,17 @@ export default {
         this.$toast.error('Impossible de charger les catégories')
       }
     },
-    
+
     changePage(page) {
       this.currentPage = page
       this.loadPosts()
       // Remonter en haut de la page
       window.scrollTo(0, 0)
     },
-    
+
     async createPost() {
       if (!this.isPostValid) return
-      
+
       try {
         const response = await this.$axios.post('/posts', {
           titre: this.newPost.titre,
@@ -311,10 +283,10 @@ export default {
           categorieId: this.newPost.categorieId,
           estAnonyme: this.newPost.estAnonyme
         })
-        
+
         this.$toast.success('Post créé avec succès')
         this.showNewPostModal = false
-        
+
         // Réinitialiser le formulaire
         this.newPost = {
           titre: '',
@@ -322,7 +294,7 @@ export default {
           categorieId: this.categories.length > 0 ? this.categories[0].id : null,
           estAnonyme: false
         }
-        
+
         // Recharger les posts
         await this.loadPosts()
       } catch (error) {
@@ -330,7 +302,7 @@ export default {
         this.$toast.error('Erreur lors de la création du post')
       }
     },
-    
+
     editPost(post) {
       this.editingPost = {
         id: post.id,
@@ -341,10 +313,10 @@ export default {
       }
       this.showEditModal = true
     },
-    
+
     async updatePost() {
       if (!this.isEditValid) return
-      
+
       try {
         const response = await this.$axios.put(`/posts/${this.editingPost.id}`, {
           titre: this.editingPost.titre,
@@ -352,10 +324,10 @@ export default {
           categorieId: this.editingPost.categorieId,
           estAnonyme: this.editingPost.estAnonyme
         })
-        
+
         this.$toast.success('Post mis à jour avec succès')
         this.showEditModal = false
-        
+
         // Recharger les posts
         await this.loadPosts()
       } catch (error) {
@@ -363,22 +335,22 @@ export default {
         this.$toast.error('Erreur lors de la mise à jour du post')
       }
     },
-    
+
     confirmDeletePost(post) {
       this.postToDelete = post
       this.showDeleteModal = true
     },
-    
+
     async deletePost() {
       if (!this.postToDelete) return
-      
+
       try {
         await this.$axios.delete(`/posts/${this.postToDelete.id}`)
-        
+
         this.$toast.success('Post supprimé avec succès')
         this.showDeleteModal = false
         this.postToDelete = null
-        
+
         // Recharger les posts
         await this.loadPosts()
       } catch (error) {
@@ -393,7 +365,8 @@ export default {
 <style scoped>
 .home-page {
   padding: 2rem;
-  padding-top: 5rem; /* Espace pour la navbar fixe */
+  padding-top: 5rem;
+  /* Espace pour la navbar fixe */
   max-width: 800px;
   margin: 0 auto;
 }
@@ -403,7 +376,8 @@ h1 {
   color: var(--primary-color);
 }
 
-.loading, .no-posts {
+.loading,
+.no-posts {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -414,7 +388,8 @@ h1 {
   text-align: center;
 }
 
-.loading i, .no-posts i {
+.loading i,
+.no-posts i {
   font-size: 3rem;
   margin-bottom: 1rem;
   color: var(--primary-color);
@@ -666,10 +641,10 @@ textarea {
     padding: 1rem;
     padding-top: 4rem;
   }
-  
+
   .modal-content {
     width: 95%;
     padding: 1.5rem;
   }
 }
-</style> 
+</style>

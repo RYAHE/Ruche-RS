@@ -14,5 +14,8 @@ COPY . .
 # Exposer le port
 EXPOSE 3000
 
-# Commande de démarrage
+# Nettoyer le cache
+RUN npm cache clean --force
+
+# Commande de démarrage en mode développement
 CMD ["npm", "run", "dev"] 

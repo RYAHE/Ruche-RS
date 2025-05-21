@@ -22,13 +22,19 @@ export default {
 
     // Configuration Axios
     axios: {
-        baseURL: process.env.API_URL || 'http://localhost:8080/api'
+        baseURL: process.env.API_URL || 'http://localhost:3000/api',
+        browserBaseURL: process.env.BROWSER_BASE_URL || 'http://localhost:8080/api'
     },
 
     // Configuration Auth
     auth: {
         strategies: {
             local: {
+                endpoints: {
+                    login: { url: '/auth/login', method: 'post' },
+                    logout: false,
+                    user: { url: '/auth/user', method: 'get' }
+                },
                 token: {
                     property: 'token',
                     required: true,
@@ -36,12 +42,7 @@ export default {
                 },
                 user: {
                     property: 'user',
-                    autoFetch: true
-                },
-                endpoints: {
-                    login: { url: '/auth/login', method: 'post' },
-                    logout: false,
-                    user: { url: '/auth/user', method: 'get' }
+                    autoFetch: false
                 }
             }
         },
@@ -66,16 +67,19 @@ export default {
     // Plugins
     plugins: [
         '~/plugins/axios.js',
-        '~/plugins/filters.js'
+        '~/plugins/filters.js',
+        '~/plugins/components.js'
     ],
 
-    // Build Configuration
+    // Build Config
     build: {
-        // Configuration spécifique pour le build
+
     },
 
     // Variables d'environnement
     publicRuntimeConfig: {
-        apiUrl: process.env.API_URL || 'http://localhost:8080/api'
+        axios: {
+            browserBaseURL: process.env.BROWSER_BASE_URL || 'http://localhost:8080/api'
+        }
     }
 } 

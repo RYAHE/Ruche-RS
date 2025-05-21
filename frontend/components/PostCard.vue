@@ -11,44 +11,32 @@
         <span>{{ post.categorie_nom }}</span>
       </div>
     </div>
-    
+
     <h3 class="post-title">{{ post.titre }}</h3>
-    
+
     <div class="post-content">{{ post.contenu }}</div>
-    
+
     <div v-if="post.date_modification" class="post-edited-info">
       Modifié le {{ formatDate(post.date_modification) }}
     </div>
-    
+
     <div class="post-actions">
-      <button 
-        class="like-btn" 
-        :class="{ 'liked': hasLiked }" 
-        @click="toggleLike"
-      >
+      <button class="like-btn" :class="{ 'liked': hasLiked }" @click="toggleLike">
         <i class="fas fa-heart"></i>
         <span class="likes-count">{{ likeCount }}</span>
       </button>
-      
+
       <button class="comment-btn" @click="$router.push(`/post/${post.id}`)">
         <i class="fas fa-comment"></i>
         <span>{{ post.nombre_commentaires || 0 }}</span>
       </button>
-      
-      <button 
-        v-if="isAuthor" 
-        class="edit-post-btn"
-        @click="$emit('edit', post)"
-      >
+
+      <button v-if="isAuthor" class="edit-post-btn" @click="$emit('edit', post)">
         <i class="fas fa-edit"></i>
         <span>Modifier</span>
       </button>
-      
-      <button 
-        v-if="isAuthor" 
-        class="delete-post-btn"
-        @click="$emit('delete', post)"
-      >
+
+      <button v-if="isAuthor" class="delete-post-btn" @click="$emit('delete', post)">
         <i class="fas fa-trash"></i>
         <span>Supprimer</span>
       </button>
@@ -58,27 +46,28 @@
 
 <script>
 export default {
+  name: 'PostCard',
   props: {
     post: {
       type: Object,
       required: true
     }
   },
-  
+
   data() {
     return {
       hasLiked: false,
       likeCount: this.post.nombre_likes || 0
     }
   },
-  
+
   computed: {
     isAuthor() {
       if (!this.$auth.loggedIn) return false
       return this.$auth.user.id === this.post.auteur_id
     }
   },
-  
+
   async mounted() {
     if (this.$auth.loggedIn) {
       try {
@@ -89,13 +78,13 @@ export default {
       }
     }
   },
-  
+
   methods: {
     formatDate(dateString) {
       const date = new Date(dateString)
       const now = new Date()
       const diff = now - date
-      
+
       // Moins d'une minute
       if (diff < 60000) {
         return 'à l\'instant'
@@ -122,13 +111,13 @@ export default {
         year: 'numeric'
       })
     },
-    
+
     async toggleLike() {
       if (!this.$auth.loggedIn) {
         this.$router.push('/auth/login')
         return
       }
-      
+
       try {
         if (this.hasLiked) {
           await this.$axios.delete(`/posts/${this.post.id}/like`)
@@ -240,4 +229,4 @@ export default {
 .anonymous-author {
   font-style: italic;
 }
-</style> 
+</style>

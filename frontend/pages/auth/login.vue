@@ -8,53 +8,34 @@
         </div>
         <h1>Connexion</h1>
       </div>
-      
+
       <form @submit.prevent="login" class="auth-form">
         <div class="form-group">
           <label for="email">Email</label>
-          <input 
-            type="email" 
-            id="email" 
-            v-model="form.email" 
-            required
-            placeholder="Votre adresse email"
-          />
+          <input type="email" id="email" v-model="form.email" required placeholder="Votre adresse email" />
         </div>
-        
+
         <div class="form-group">
           <label for="password">Mot de passe</label>
           <div class="password-input">
-            <input 
-              :type="showPassword ? 'text' : 'password'" 
-              id="password" 
-              v-model="form.password" 
-              required
-              placeholder="Votre mot de passe"
-            />
-            <button 
-              type="button" 
-              class="toggle-password" 
-              @click="showPassword = !showPassword"
-            >
+            <input :type="showPassword ? 'text' : 'password'" id="password" v-model="form.password" required
+              placeholder="Votre mot de passe" />
+            <button type="button" class="toggle-password" @click="showPassword = !showPassword">
               <i class="fas" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
             </button>
           </div>
         </div>
-        
+
         <div v-if="error" class="error-message">
           {{ error }}
         </div>
-        
-        <button 
-          type="submit" 
-          class="submit-btn" 
-          :disabled="loading"
-        >
+
+        <button type="submit" class="submit-btn" :disabled="loading">
           <i v-if="loading" class="fas fa-spinner fa-spin"></i>
           <span v-else>Se connecter</span>
         </button>
       </form>
-      
+
       <div class="auth-footer">
         <p>Pas encore de compte ?</p>
         <nuxt-link to="/auth/register" class="register-link">
@@ -68,7 +49,7 @@
 <script>
 export default {
   middleware: 'guest',
-  
+
   data() {
     return {
       form: {
@@ -80,32 +61,54 @@ export default {
       showPassword: false
     }
   },
-  
+
   methods: {
     async login() {
-      this.error = null
-      this.loading = true
-      
+      if (!this.isFormValid) return;
+
+      this.loading = true;
+
       try {
-        await this.$auth.loginWith('local', {
-          data: {
-            email: this.form.email,
-            password: this.form.password
-          }
-        })
-        
-        this.$toast.success('Connexion réussie')
-        this.$router.push('/')
-      } catch (error) {
-        console.error('Erreur de connexion:', error)
-        
-        if (error.response && error.response.data && error.response.data.message) {
-          this.error = error.response.data.message
+        console.log("Tentative de connexion avec:", {
+          email: this.form.email,
+          password: this.form.password ? "******" : "non défini"
+        });
+
+        // Utiliser directement axios pour la connexion
+        const response = await this.$axios.post('/auth/login', {
+          email: this.form.email,
+          password: this.form.password
+        });
+
+        console.log("Réponse de connexion:", response.data);
+
+        if (response.data && response.data.token) {
+          // Stockage manuel du token
+          localStorage.setItem('auth._token.local', `Bearer ${response.data.token}`);
+
+          // Mise à jour manuelle de l'état d'authentification
+          this.$auth.setUser(response.data.user);
+          this.$auth.$storage.setState('loggedIn', true);
+
+          this.$toast.success('Connexion réussie !');
+
+          // Après une connexion réussie
+          const redirectPath = localStorage.getItem('redirectPath') || '/';
+          localStorage.removeItem('redirectPath');
+          this.$router.push(redirectPath);
         } else {
-          this.error = 'Erreur lors de la connexion. Veuillez réessayer.'
+          this.$toast.error('Connexion réussie mais impossible de récupérer votre profil.');
+        }
+      } catch (error) {
+        console.error("Erreur de connexion:", error);
+
+        if (error.response && error.response.data && error.response.data.message) {
+          this.$toast.error(error.response.data.message);
+        } else {
+          this.$toast.error('Erreur lors de la connexion. Veuillez réessayer.');
         }
       } finally {
-        this.loading = false
+        this.loading = false;
       }
     }
   }
@@ -232,4 +235,4 @@ export default {
 .register-link:hover {
   text-decoration: underline;
 }
-</style> 
+</style>
