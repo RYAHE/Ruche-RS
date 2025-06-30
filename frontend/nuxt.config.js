@@ -26,7 +26,7 @@ export default {
         browserBaseURL: process.env.BROWSER_BASE_URL || 'http://localhost:8080/api'
     },
 
-    // Configuration Auth
+    // Configuration Auth - désactiver les fonctionnalités automatiques
     auth: {
         strategies: {
             local: {
@@ -38,19 +38,27 @@ export default {
                 token: {
                     property: 'token',
                     required: true,
-                    type: 'Bearer'
+                    type: 'Bearer',
+                    maxAge: false, // Désactiver la vérification automatique d'expiration
+                    global: false  // Désactiver l'ajout automatique du token aux requêtes
                 },
                 user: {
                     property: 'user',
                     autoFetch: false
-                }
+                },
+                // Désactiver les intercepteurs automatiques
+                autoLogout: false
             }
         },
         redirect: {
             login: '/auth/login',
             logout: '/',
-            home: '/'
-        }
+            home: '/',
+            register: '/auth/register'
+        },
+        // Désactiver les comportements automatiques
+        watchLoggedIn: false,
+        rewriteRedirects: false
     },
 
     // Configuration des toasts
@@ -66,9 +74,11 @@ export default {
 
     // Plugins
     plugins: [
+        '~/plugins/auth-custom.js',
         '~/plugins/axios.js',
         '~/plugins/filters.js',
-        '~/plugins/components.js'
+        '~/plugins/components.js',
+        '~/plugins/auth.js'
     ],
 
     // Build Config
@@ -81,5 +91,10 @@ export default {
         axios: {
             browserBaseURL: process.env.BROWSER_BASE_URL || 'http://localhost:8080/api'
         }
+    },
+
+    // Middleware global
+    router: {
+        middleware: ['sync-auth']
     }
 } 

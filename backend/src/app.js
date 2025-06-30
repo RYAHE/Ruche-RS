@@ -32,11 +32,13 @@ const authRoutes = require('./routes/authRoutes');
 const postRoutes = require('./routes/postRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Route de base
 app.get('/', (req, res) => {
@@ -61,5 +63,8 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`- GET /api/posts : Liste des posts`);
     console.log(`- POST /api/auth/register : Inscription`);
     console.log(`- POST /api/auth/login : Connexion`);
+    console.log(`- GET /api/admin/posts : Posts avec infos complètes (admin)`);
+    console.log(`- GET /api/admin/users : Liste des utilisateurs (admin)`);
+    console.log(`- GET /api/admin/stats : Statistiques (admin)`);
     console.log(`Serveur démarré sur le port ${PORT}`);
 }); 

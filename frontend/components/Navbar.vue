@@ -18,26 +18,26 @@
     <div class="category-filter">
       <label for="categoryFilter">Catégorie :</label>
       <select id="categoryFilter" v-model="selectedCategory" @change="filterByCategory">
-        <option value="all">Toutes</option>
+        <option value="all">ALL</option>
         <option v-for="category in categories" :key="category.id" :value="category.id">
           {{ category.nom }}
-        </option>
+        </option>  
       </select>
     </div>
 
     <!-- Actions de navigation -->
     <div class="nav-actions">
       <!-- Boutons d'authentification (si non connecté) -->
-      <div class="auth-buttons" v-if="!$auth.loggedIn">
-        <button class="login-btn" @click="$router.push('/auth/login')">Connexion</button>
-        <button class="register-btn" @click="$router.push('/auth/register')">Inscription</button>
+      <div class="auth-buttons" v-if="!isUserLoggedIn">
+        <button class="login-btn" @click="goToLogin">Connexion</button>
+        <button class="register-btn" @click="goToRegister">Inscription</button>
       </div>
 
       <!-- Profil utilisateur (si connecté) -->
       <div class="user-profile" v-else>
         <div class="user-menu-trigger" @click="toggleUserMenu">
           <i class="fas fa-user-circle"></i>
-          <span class="username">{{ $auth.user.username }}</span>
+          <span class="username">{{ userName }}</span>
           <i class="fas fa-chevron-down"></i>
         </div>
 
@@ -46,12 +46,24 @@
           <div class="user-menu-header">
             <i class="fas fa-user-circle"></i>
             <div class="user-info">
-              <span class="username">{{ $auth.user.username }}</span>
-              <span class="user-email">{{ $auth.user.email }}</span>
+              <span class="username">{{ userName }}</span>
+              <span class="user-email">{{ userEmail }}</span>
             </div>
           </div>
 
           <div class="user-menu-items">
+            <button class="menu-item debug-btn" v-if="isDebugMode" @click="checkAuthState">
+              <i class="fas fa-bug"></i>
+              Vérifier Auth
+            </button>
+            <button class="menu-item debug-btn" v-if="isDebugMode" @click="showDebugLogs">
+              <i class="fas fa-file-alt"></i>
+              Voir Logs Debug
+            </button>
+            <button class="menu-item admin-btn" v-if="isAdmin" @click="navigateTo('/admin')">
+              <i class="fas fa-shield-alt"></i>
+              Administration
+            </button>
             <button class="menu-item" @click="navigateTo('/profile')">
               <i class="fas fa-id-card"></i>
               Mon Profil
@@ -83,21 +95,110 @@ export default {
       searchQuery: '',
       selectedCategory: 'all',
       categories: [],
-      showUserMenu: false
+      showUserMenu: false,
+      isDebugMode: process.env.NODE_ENV === 'development',
+      authUpdateTrigger: 0
+    }
+  },
+
+  computed: {
+    isUserLoggedIn() {
+      this.authUpdateTrigger;
+      return this.$authCustom && this.$authCustom.isAuthenticated();
+    },
+    
+    userName() {
+      this.authUpdateTrigger;
+      const user = this.$authCustom && this.$authCustom.getUser();
+      return user ? user.username : 'Utilisateur';
+    },
+    
+    userEmail() {
+      this.authUpdateTrigger;
+      const user = this.$authCustom && this.$authCustom.getUser();
+      return user ? user.email : '';
+    },
+
+    isAdmin() {
+      this.authUpdateTrigger;
+      const user = this.$authCustom && this.$authCustom.getUser();
+      return user ? user.est_admin : false;
+    }
+  },
+
+  watch: {
+    '$authCustom': {
+      handler() {
+        console.log('[NAVBAR] Changement détecté dans $authCustom');
+        this.forceUpdate();
+      },
+      deep: true
     }
   },
 
   async mounted() {
+    // Écouter les événements d'authentification personnalisés
+    if (process.client) {
+      // Ajouter un listener pour les changements d'état d'authentification
+      window.addEventListener('auth-state-changed', this.handleAuthStateChange);
+      
+      // Forcer une mise à jour initiale
+      this.$nextTick(() => {
+        this.forceUpdate();
+      });
+    }
+
     try {
-      const response = await this.$axios.get('/categories')
-      this.categories = response.data.categories
+      // Vérifier d'abord que $axios est disponible
+      if (!this.$axios) {
+        console.error('Erreur: $axios n\'est pas disponible');
+        this.categories = [];
+        return;
+      }
+      
+      try {
+        const response = await this.$axios.get('/categories');
+        if (response && response.data && response.data.categories) {
+          this.categories = response.data.categories;
+        } else {
+          console.warn('Format de réponse inattendu pour les catégories:', response);
+          this.categories = [];
+        }
+      } catch (apiError) {
+        console.error('Erreur lors du chargement des catégories:', apiError);
+        this.$toast.error('Impossible de charger les catégories');
+        this.categories = [];
+      }
     } catch (error) {
-      console.error('Erreur lors du chargement des catégories:', error)
-      this.$toast.error('Impossible de charger les catégories')
+      console.error('Erreur globale dans le composant Navbar:', error);
+      this.categories = [];
+    }
+  },
+
+  beforeDestroy() {
+    // Nettoyer les listeners d'événements
+    if (process.client) {
+      window.removeEventListener('auth-state-changed', this.handleAuthStateChange);
     }
   },
 
   methods: {
+    // Gestionnaire pour les changements d'état d'authentification
+    handleAuthStateChange(event) {
+      console.log('[NAVBAR] Événement auth-state-changed reçu:', event.detail);
+      this.forceUpdate();
+    },
+
+    // Méthode pour forcer la mise à jour de l'interface
+    forceUpdate() {
+      this.authUpdateTrigger++;
+      console.log('[NAVBAR] Force update triggered:', {
+        isAuthenticated: this.isUserLoggedIn,
+        userName: this.userName,
+        userEmail: this.userEmail
+      });
+    },
+
     search() {
       if (this.searchQuery.trim()) {
         this.$router.push(`/search?q=${encodeURIComponent(this.searchQuery.trim())}`)
@@ -106,14 +207,47 @@ export default {
 
     filterByCategory() {
       if (this.selectedCategory === 'all') {
-        this.$router.push('/')
+        this.$router.push('/?exclude=NSFW')
       } else {
-        this.$router.push(`/category/${this.selectedCategory}`)
+        // Trouver la catégorie correspondante pour obtenir son nom
+        const category = this.categories.find(cat => cat.id === this.selectedCategory)
+        if (category) {
+          // Mapper les noms vers les URLs appropriées selon les nouvelles catégories
+          const categoryMapping = {
+            'random': 'random',
+            'annonces': 'annonces',
+            'questions': 'questions',
+            'vg': 'vg',
+            'nsfw': 'nsfw'
+          }
+          
+          const categoryName = category.nom.toLowerCase()
+          const routeName = categoryMapping[categoryName]
+          
+          if (routeName) {
+            this.$router.push(`/category/${routeName}`)
+          } else {
+            // Si pas de mapping trouvé, utiliser l'ID comme avant (page dynamique)
+            this.$router.push(`/category/${this.selectedCategory}`)
+          }
+        } else {
+          // Fallback vers l'accueil si catégorie non trouvée
+          this.$router.push('/')
+        }
       }
     },
 
     toggleUserMenu() {
       this.showUserMenu = !this.showUserMenu
+    },
+
+    goToLogin() {
+      const baseUrl = window.location.origin;
+      window.location.href = `${baseUrl}/auth/login`;
+    },
+    
+    goToRegister() {
+      this.$router.push('/auth/register');
     },
 
     navigateTo(path) {
@@ -123,13 +257,81 @@ export default {
 
     async logout() {
       try {
-        await this.$auth.logout()
-        this.$toast.success('Vous êtes déconnecté')
-        this.$router.push('/')
+        await this.$authCustom.logout();
+        
+        this.forceUpdate();
+        
+        this.$toast.success('Vous êtes déconnecté');
       } catch (error) {
-        console.error('Erreur lors de la déconnexion:', error)
-        this.$toast.error('Erreur lors de la déconnexion')
+        console.error('Erreur lors de la déconnexion:', error);
+        this.$toast.error('Erreur lors de la déconnexion');
+        
+        if (process.client) {
+          localStorage.clear();
+          window.location.href = '/auth/login';
+        }
       }
+    },
+
+    checkAuthState() {
+      const authCustomState = {
+        isAuthenticated: this.$authCustom.isAuthenticated(),
+        user: this.$authCustom.getUser(),
+        token: this.$authCustom.getToken() ? 'Présent' : 'Absent'
+      };
+      
+      const authNuxtState = {
+        isLoggedIn: this.$auth && this.$auth.loggedIn,
+        user: this.$auth && this.$auth.user,
+        strategy: this.$auth && this.$auth.strategy,
+        token: process.client && localStorage.getItem('auth._token.local') ? 'Présent' : 'Absent'
+      };
+      
+      console.log('=== ÉTAT D\'AUTHENTIFICATION ===');
+      console.log('Auth Custom:', authCustomState);
+      console.log('Auth Nuxt:', authNuxtState);
+      
+      this.$toast.info(`Auth Custom: ${authCustomState.isAuthenticated ? 'Connecté' : 'Déconnecté'} | 
+                         Auth Nuxt: ${authNuxtState.isLoggedIn ? 'Connecté' : 'Déconnecté'}`);
+      
+      if (authCustomState.isAuthenticated && !authNuxtState.isLoggedIn) {
+        this.$auth.setUser(authCustomState.user);
+        this.$auth.$storage.setState('loggedIn', true);
+        this.$toast.success('Synchronisation Custom → Nuxt effectuée');
+      } else if (!authCustomState.isAuthenticated && authNuxtState.isLoggedIn) {
+        this.$authCustom.setUser(authNuxtState.user);
+        this.$toast.success('Synchronisation Nuxt → Custom effectuée');
+      }
+      
+      this.forceUpdate();
+    },
+
+    showDebugLogs() {
+      const debugLogs = localStorage.getItem('debug_logs');
+      if (debugLogs) {
+        const logs = JSON.parse(debugLogs);
+        console.log('=== LOGS DE DEBUG ===');
+        logs.forEach((log, index) => {
+          console.log(`${index + 1}. [${log.timestamp}] ${log.message}`);
+          if (log.data) {
+            console.log('   Data:', JSON.parse(log.data));
+          }
+        });
+        alert(`${logs.length} logs trouvés. Voir la console pour les détails.\n\nDernier log: ${logs[logs.length - 1]?.message || 'Aucun'}`);
+      } else {
+        alert('Aucun log de debug trouvé dans localStorage');
+      }
+      
+      // Afficher aussi l'état actuel
+      console.log('=== ÉTAT ACTUEL ===');
+      console.log('Auth Custom:', {
+        isAuthenticated: this.$authCustom?.isAuthenticated(),
+        user: this.$authCustom?.getUser(),
+        token: this.$authCustom?.getToken()?.substring(0, 20) + '...'
+      });
+      console.log('localStorage tokens:', {
+        authToken: localStorage.getItem('auth._token.local')?.substring(0, 20) + '...'
+      });
     }
   }
 }
@@ -285,21 +487,64 @@ export default {
   color: #ff4444;
 }
 
+.debug-btn {
+  background-color: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+.admin-btn {
+  background-color: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
 @media (max-width: 768px) {
   .navbar {
     flex-wrap: wrap;
     padding: 0.5rem;
+    gap: 0.5rem;
   }
 
-  .search-bar,
+  .logo {
+    font-size: 1.2rem;
+  }
+
+  .search-bar {
+    order: 4;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
   .category-filter {
-    order: 3;
+    order: 5;
     width: 100%;
     margin-top: 0.5rem;
   }
 
   .nav-actions {
     margin-left: auto;
+    order: 2;
+  }
+
+  .user-menu {
+    right: 0.5rem;
+    width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar {
+    padding: 0.3rem;
+  }
+
+  .category-filter {
+    min-width: calc(25% - 0.375rem);
+    padding: 0.5rem 0.3rem;
+  }
+
+  .category-filter select {
+    font-size: 0.8rem;
   }
 }
 </style>

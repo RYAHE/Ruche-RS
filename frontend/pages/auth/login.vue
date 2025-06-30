@@ -34,6 +34,12 @@
           <i v-if="loading" class="fas fa-spinner fa-spin"></i>
           <span v-else>Se connecter</span>
         </button>
+        
+        <!-- Bouton de nettoyage pour le débogage -->
+        <button type="button" class="debug-btn" @click="cleanupAuth" title="Nettoyer toutes les données d'authentification">
+          <i class="fas fa-broom"></i>
+          Nettoyer l'authentification
+        </button>
       </form>
 
       <div class="auth-footer">
@@ -62,51 +68,102 @@ export default {
     }
   },
 
+  beforeMount() {
+    // Effacer toute information d'authentification existante
+    if (process.client) {
+      console.log('[LOGIN] Nettoyage préventif de l\'authentification...');
+      this.cleanupAuth();
+    }
+  },
+
   methods: {
+    cleanupAuth() {
+      if (process.client) {
+        // Utiliser notre méthode de nettoyage complet
+        if (this.$authCustom && this.$authCustom.fullCleanup) {
+          this.$authCustom.fullCleanup();
+        } else {
+          // Nettoyage manuel si le plugin n'est pas encore chargé
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (
+              key.startsWith('auth.') || 
+              key === 'auth' || 
+              key.includes('token') ||
+              key.includes('user')
+            )) {
+              keysToRemove.push(key);
+            }
+          }
+          
+          keysToRemove.forEach(key => {
+            console.log('[LOGIN] Suppression de la clé:', key);
+            localStorage.removeItem(key);
+          });
+        }
+        
+        console.log('[LOGIN] Nettoyage terminé');
+      }
+    },
+
     async login() {
-      if (!this.isFormValid) return;
+      // Vérification des champs
+      if (!this.form.email || !this.form.password) {
+        this.error = 'Veuillez remplir tous les champs';
+        return;
+      }
 
       this.loading = true;
+      this.error = null;
 
       try {
-        console.log("Tentative de connexion avec:", {
-          email: this.form.email,
-          password: this.form.password ? "******" : "non défini"
+        console.log('[LOGIN] Tentative de connexion pour:', this.form.email);
+
+        // Utiliser notre système d'authentification personnalisé
+        const response = await this.$authCustom.login(
+          this.form.email,
+          this.form.password
+        );
+
+        console.log('[LOGIN] Réponse de connexion:', response);
+        
+        // Vérifier l'état d'authentification après connexion
+        const isAuth = this.$authCustom.isAuthenticated();
+        const user = this.$authCustom.getUser();
+        const token = this.$authCustom.getToken();
+        
+        console.log('[LOGIN] État après connexion:', {
+          isAuthenticated: isAuth,
+          user: user,
+          hasToken: !!token
         });
-
-        // Utiliser directement axios pour la connexion
-        const response = await this.$axios.post('/auth/login', {
-          email: this.form.email,
-          password: this.form.password
-        });
-
-        console.log("Réponse de connexion:", response.data);
-
-        if (response.data && response.data.token) {
-          // Stockage manuel du token
-          localStorage.setItem('auth._token.local', `Bearer ${response.data.token}`);
-
-          // Mise à jour manuelle de l'état d'authentification
-          this.$auth.setUser(response.data.user);
-          this.$auth.$storage.setState('loggedIn', true);
-
-          this.$toast.success('Connexion réussie !');
-
-          // Après une connexion réussie
-          const redirectPath = localStorage.getItem('redirectPath') || '/';
-          localStorage.removeItem('redirectPath');
-          this.$router.push(redirectPath);
+        
+        if (isAuth && user) {
+          // Afficher un message de succès
+          this.$toast.success(`Connexion réussie ! Bienvenue ${user.username}`);
+          
+          // Attendre un peu pour que l'utilisateur voie le message
+          setTimeout(() => {
+            console.log('[LOGIN] Redirection vers la page d\'accueil...');
+            // Utiliser $router.push au lieu de window.location.href pour éviter un rechargement complet
+            this.$router.push('/');
+          }, 1000);
         } else {
-          this.$toast.error('Connexion réussie mais impossible de récupérer votre profil.');
+          console.error('[LOGIN] Connexion échouée: état d\'authentification invalide');
+          this.error = 'Erreur lors de la connexion : état invalide';
+          this.$toast.error(this.error);
         }
       } catch (error) {
-        console.error("Erreur de connexion:", error);
-
+        console.error("[LOGIN] Erreur de connexion:", error);
+        
         if (error.response && error.response.data && error.response.data.message) {
-          this.$toast.error(error.response.data.message);
+          this.error = error.response.data.message;
         } else {
-          this.$toast.error('Erreur lors de la connexion. Veuillez réessayer.');
+          this.error = 'Erreur lors de la connexion. Veuillez réessayer.';
         }
+        
+        this.$toast.error(this.error);
       } finally {
         this.loading = false;
       }
@@ -218,6 +275,29 @@ export default {
 .submit-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.debug-btn {
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 15px;
+  border: 1px solid #ff6b6b;
+  background-color: transparent;
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-top: 1rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.debug-btn:hover {
+  background-color: #ff6b6b;
+  color: white;
+  transform: translateY(-1px);
 }
 
 .auth-footer {

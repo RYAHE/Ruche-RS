@@ -8,5 +8,6 @@ router.put('/:id', authMiddleware, commentController.update);
 router.delete('/:id', authMiddleware, commentController.delete);
 router.post('/:id/like', authMiddleware, commentController.addLike);
 router.delete('/:id/like', authMiddleware, commentController.removeLike);
+router.get('/:id/like/check', authMiddleware, commentController.checkLike);
 
 module.exports = router; 

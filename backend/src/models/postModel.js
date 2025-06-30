@@ -3,16 +3,16 @@ const db = require('../config/db');
 
 //creation du model post
 const postModel = {
-    // Créer un nouveau post (version simplifiée pour débogage)
-    async create(titre, contenu, utilisateur_id, categorie_id) {
+    // Créer un nouveau post
+    async create(titre, contenu, utilisateur_id, categorie_id, estAnonyme = false) {
         try {
             const query = `
-                INSERT INTO posts (titre, contenu, utilisateur_id, categorie_id)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO posts (titre, contenu, utilisateur_id, categorie_id, est_anonyme)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING *
             `;
 
-            const result = await db.query(query, [titre, contenu, utilisateur_id, categorie_id]);
+            const result = await db.query(query, [titre, contenu, utilisateur_id, categorie_id, estAnonyme]);
 
             console.log("Résultat de la création du post:", result.rows[0]);
 
@@ -24,9 +24,10 @@ const postModel = {
     },
 
     // Récupérer tous les posts (non supprimés)
-    async getAll(page = 1, limit = 10) {
+    async getAll(page = 1, limit = 10, excludeCategory = null) {
         const offset = (page - 1) * limit;
-        const query = `
+        
+        let query = `
             SELECT p.id, p.titre, p.contenu, p.date_creation, p.date_modification, 
                    p.est_anonyme, p.categorie_id, c.nom as categorie_nom,
                    CASE WHEN p.est_anonyme = false THEN u.username ELSE 'Anonyme' END as auteur,
@@ -37,10 +38,22 @@ const postModel = {
             LEFT JOIN utilisateurs u ON p.utilisateur_id = u.id
             LEFT JOIN categories c ON p.categorie_id = c.id
             WHERE p.est_supprime = false
-            ORDER BY p.date_creation DESC
-            LIMIT $1 OFFSET $2
         `;
-        const result = await db.query(query, [limit, offset]);
+        
+        const params = [];
+        let paramIndex = 1;
+        
+        // Ajouter la condition d'exclusion si nécessaire
+        if (excludeCategory) {
+            query += ` AND p.categorie_id != $${paramIndex}`;
+            params.push(excludeCategory);
+            paramIndex++;
+        }
+        
+        query += ` ORDER BY p.date_creation DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        params.push(limit, offset);
+        
+        const result = await db.query(query, params);
         return result.rows;
     },
 
@@ -261,6 +274,56 @@ const postModel = {
         query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
         params.push(limit, offset);
 
+        const result = await db.query(query, params);
+        return result.rows;
+    },
+
+    // Récupérer un post par son ID avec informations complètes pour les administrateurs
+    async getByIdForAdmin(postId) {
+        const query = `
+            SELECT p.id, p.titre, p.contenu, p.date_creation, p.date_modification, 
+                   p.est_anonyme, p.categorie_id, c.nom as categorie_nom,
+                   u.username as auteur, u.id as auteur_id, u.email as auteur_email,
+                   (SELECT COUNT(*) FROM commentaires WHERE post_id = p.id AND est_supprime = false) as nombre_commentaires,
+                   (SELECT COUNT(*) FROM likes_posts WHERE post_id = p.id) as nombre_likes
+            FROM posts p
+            LEFT JOIN utilisateurs u ON p.utilisateur_id = u.id
+            LEFT JOIN categories c ON p.categorie_id = c.id
+            WHERE p.id = $1 AND p.est_supprime = false
+        `;
+        const result = await db.query(query, [postId]);
+        return result.rows[0];
+    },
+
+    // Récupérer tous les posts avec informations complètes pour les administrateurs
+    async getAllForAdmin(page = 1, limit = 10, excludeCategory = null) {
+        const offset = (page - 1) * limit;
+        
+        let query = `
+            SELECT p.id, p.titre, p.contenu, p.date_creation, p.date_modification, 
+                   p.est_anonyme, p.categorie_id, c.nom as categorie_nom,
+                   u.username as auteur, u.id as auteur_id, u.email as auteur_email,
+                   (SELECT COUNT(*) FROM commentaires WHERE post_id = p.id AND est_supprime = false) as nombre_commentaires,
+                   (SELECT COUNT(*) FROM likes_posts WHERE post_id = p.id) as nombre_likes
+            FROM posts p
+            LEFT JOIN utilisateurs u ON p.utilisateur_id = u.id
+            LEFT JOIN categories c ON p.categorie_id = c.id
+            WHERE p.est_supprime = false
+        `;
+        
+        const params = [];
+        let paramIndex = 1;
+        
+        // Ajouter la condition d'exclusion si nécessaire
+        if (excludeCategory) {
+            query += ` AND p.categorie_id != $${paramIndex}`;
+            params.push(excludeCategory);
+            paramIndex++;
+        }
+        
+        query += ` ORDER BY p.date_creation DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        params.push(limit, offset);
+        
         const result = await db.query(query, params);
         return result.rows;
     }

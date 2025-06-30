@@ -11,7 +11,7 @@
       <div v-else-if="posts.length === 0" class="no-posts">
         <i class="fas fa-comment-slash"></i>
         <p>Aucun post à afficher pour le moment</p>
-        <button v-if="$auth.loggedIn" class="create-post-btn" @click="showNewPostModal = true">
+        <button v-if="$authCustom.isAuthenticated()" class="create-post-btn" @click="showNewPostModal = true">
           Créer le premier post
         </button>
       </div>
@@ -34,7 +34,7 @@
     </div>
 
     <!-- Bouton pour créer un nouveau post (visible seulement si connecté) -->
-    <button v-if="$auth.loggedIn" class="new-post-btn" @click="showNewPostModal = true"
+    <button v-if="$authCustom.isAuthenticated()" class="floating-new-post-btn" @click="showNewPostModal = true"
       title="Créer un nouveau post"></button>
 
     <!-- Modal pour créer un nouveau post -->
@@ -50,8 +50,8 @@
               maxlength="255" />
           </div>
 
-          <div class="category-selector">
-            <label for="postCategory">Catégorie :</label>
+          <div class="form-group">
+            <label for="postCategory">Catégorie</label>
             <select id="postCategory" v-model="newPost.categorieId">
               <option v-for="category in categories" :key="category.id" :value="category.id">
                 {{ category.nom }}
@@ -93,8 +93,8 @@
               maxlength="255" />
           </div>
 
-          <div class="category-selector">
-            <label for="editPostCategory">Catégorie :</label>
+          <div class="form-group">
+            <label for="editPostCategory">Catégorie</label>
             <select id="editPostCategory" v-model="editingPost.categorieId">
               <option v-for="category in categories" :key="category.id" :value="category.id">
                 {{ category.nom }}
@@ -114,11 +114,6 @@
           <div class="anonymous-option">
             <input type="checkbox" id="editAnonymousPost" v-model="editingPost.estAnonyme" />
             <label for="editAnonymousPost">Poster anonymement</label>
-          </div>
-
-          <div class="edit-info">
-            <i class="fas fa-info-circle"></i>
-            <span>La modification sera visible pour tous les utilisateurs.</span>
           </div>
         </div>
 
@@ -213,19 +208,45 @@ export default {
     ])
   },
 
+  watch: {
+    '$route'() {
+      // Recharger les posts quand l'URL change (ex: paramètre exclude)
+      this.loadPosts()
+    }
+  },
+
   methods: {
     async loadPosts() {
       this.loading = true;
       try {
         console.log("Tentative de récupération des posts...");
-        const response = await this.$axios.$get('/posts', {
-          params: {
+        
+        // Récupérer le paramètre exclude depuis l'URL
+        const excludeCategory = this.$route.query.exclude;
+        
+        let excludeCategoryId = null;
+        if (excludeCategory === 'NSFW') {
+          // Trouver l'ID de la catégorie NSFW
+          await this.loadCategories(); // S'assurer que les catégories sont chargées
+          const nsfwCategory = this.categories.find(cat => cat.nom.toUpperCase() === 'NSFW');
+          if (nsfwCategory) {
+            excludeCategoryId = nsfwCategory.id;
+          }
+        }
+        
+        const params = {
             page: this.currentPage,
             limit: this.limit,
             category: this.selectedCategory,
             search: this.searchQuery
+        };
+        
+        // Ajouter le paramètre d'exclusion si nécessaire
+        if (excludeCategoryId) {
+          params.excludeCategory = excludeCategoryId;
           }
-        });
+        
+        const response = await this.$axios.$get('/posts', { params });
 
         console.log("Réponse complète:", response);
 
@@ -276,16 +297,74 @@ export default {
     async createPost() {
       if (!this.isPostValid) return
 
+      // Fonction helper pour stocker les logs de debug
+      const logDebug = (message, data = null) => {
+        console.log(message, data);
+        const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
+        logs.push({
+          timestamp: new Date().toISOString(),
+          message,
+          data: data ? JSON.stringify(data) : null
+        });
+        localStorage.setItem('debug_logs', JSON.stringify(logs.slice(-20))); // Garder seulement les 20 derniers logs
+      };
+
       try {
-        const response = await this.$axios.post('/posts', {
+        logDebug('[CREATE-POST] === DÉBUT CRÉATION POST ===');
+        
+        // Vérifications détaillées de l'état d'authentification
+        const isAuthenticatedCustom = this.$authCustom.isAuthenticated();
+        const userCustom = this.$authCustom.getUser();
+        const tokenCustom = this.$authCustom.getToken();
+        const tokenLocalStorage = localStorage.getItem('auth._token.local');
+        
+        const authState = {
+          isAuthenticatedCustom,
+          userCustom,
+          tokenCustomExists: !!tokenCustom,
+          tokenCustomPreview: tokenCustom ? tokenCustom.substring(0, 20) + '...' : 'null',
+          tokenLocalStorageExists: !!tokenLocalStorage,
+          tokenLocalStoragePreview: tokenLocalStorage ? tokenLocalStorage.substring(0, 20) + '...' : 'null',
+          tokensMatch: tokenCustom === tokenLocalStorage
+        };
+        
+        logDebug('[CREATE-POST] État d\'authentification détaillé:', authState);
+
+        // Vérifier que l'utilisateur est connecté avec notre système personnalisé
+        if (!isAuthenticatedCustom) {
+          logDebug('[CREATE-POST] Utilisateur non authentifié selon $authCustom');
+          alert('DEBUG: Utilisateur non authentifié selon $authCustom\nVoir localStorage.debug_logs pour plus de détails');
+          this.$toast.error('Vous devez être connecté pour créer un post');
+          
+          // Désactiver temporairement la redirection pour debug
+          console.log('DEBUG: Redirection désactivée pour debug. Vérifiez les logs.');
+          // setTimeout(() => {
+          //   window.location.href = '/auth/login';
+          // }, 300);
+          return;
+        }
+        
+        logDebug('[CREATE-POST] Utilisateur authentifié, envoi de la requête...');
+        
+        const postData = {
           titre: this.newPost.titre,
-          contenu: this.newPost.contenu,
+          contenu: this.newPost.contenu.substring(0, 50) + '...',
           categorieId: this.newPost.categorieId,
           estAnonyme: this.newPost.estAnonyme
-        })
+        };
+        logDebug('[CREATE-POST] Données du post:', postData);
+        
+        // Utiliser l'axios configuré globalement plutôt qu'une instance isolée
+        const response = await this.$axios.post('/posts', {
+            titre: this.newPost.titre,
+            contenu: this.newPost.contenu,
+            categorieId: this.newPost.categorieId,
+            estAnonyme: this.newPost.estAnonyme
+        });
 
-        this.$toast.success('Post créé avec succès')
-        this.showNewPostModal = false
+        logDebug('[CREATE-POST] ✅ Post créé avec succès:', response);
+        this.$toast.success('Post créé avec succès');
+        this.showNewPostModal = false;
 
         // Réinitialiser le formulaire
         this.newPost = {
@@ -293,13 +372,77 @@ export default {
           contenu: '',
           categorieId: this.categories.length > 0 ? this.categories[0].id : null,
           estAnonyme: false
-        }
+        };
 
         // Recharger les posts
-        await this.loadPosts()
+        await this.loadPosts();
+        
+        logDebug('[CREATE-POST] === FIN CRÉATION POST (SUCCÈS) ===');
       } catch (error) {
-        console.error('Erreur lors de la création du post:', error)
-        this.$toast.error('Erreur lors de la création du post')
+        logDebug('[CREATE-POST] === ERREUR CRÉATION POST ===');
+        logDebug('[CREATE-POST] Erreur lors de la création du post:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        
+        // Afficher l'erreur immédiatement
+        alert(`DEBUG ERREUR: ${error.response?.status || 'Unknown'} - ${error.response?.data?.message || error.message}\nVoir localStorage.debug_logs pour détails complets`);
+        
+        // Gestion d'erreur plus intelligente
+        if (error.response && error.response.status === 401) {
+          logDebug('[CREATE-POST] ❌ Erreur 401 détectée, vérification du token...');
+          
+          // État d'authentification après l'erreur
+          const authStateAfterError = {
+            isAuthenticated: this.$authCustom.isAuthenticated(),
+            user: this.$authCustom.getUser(),
+            token: this.$authCustom.getToken(),
+            tokenLS: localStorage.getItem('auth._token.local')
+          };
+          logDebug('[CREATE-POST] État auth après erreur 401:', authStateAfterError);
+          
+          // Avant de déconnecter, vérifier si le token est vraiment invalide
+          try {
+            logDebug('[CREATE-POST] Tentative de vérification avec fetchUser...');
+            const user = await this.$authCustom.fetchUser();
+            if (user) {
+              // Le token est valide, l'erreur 401 vient d'ailleurs
+              logDebug('[CREATE-POST] ✅ Token valide, erreur 401 temporaire');
+              this.$toast.error('Erreur temporaire. Veuillez réessayer.');
+              return;
+            } else {
+              logDebug('[CREATE-POST] ❌ fetchUser a retourné null');
+            }
+          } catch (fetchError) {
+            logDebug('[CREATE-POST] ❌ Erreur lors de fetchUser:', fetchError.message);
+            logDebug('[CREATE-POST] Token invalide confirmé, déconnexion nécessaire');
+          }
+          
+          // Si on arrive ici, le token est vraiment invalide
+          logDebug('[CREATE-POST] Déconnexion de l\'utilisateur...');
+          
+          // Afficher les logs avant déconnexion
+          const debugLogs = localStorage.getItem('debug_logs');
+          alert('DEBUG: Session expirée. Logs sauvegardés dans localStorage.debug_logs\n\nDerniers logs:\n' + debugLogs);
+          
+          this.$toast.error('Votre session a expiré. Veuillez vous reconnecter.');
+          
+          // Désactiver temporairement la déconnexion automatique pour debug
+          console.log('DEBUG: Déconnexion automatique désactivée pour debug. Vérifiez les logs dans localStorage.');
+          // this.$authCustom.logout();
+        } else {
+          // Autres erreurs
+          const errorMessage = error.response?.data?.message || error.message || 'Erreur inconnue';
+          this.$toast.error('Erreur lors de la création du post: ' + errorMessage);
+          logDebug('[CREATE-POST] Détails de l\'erreur non-401:', {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+          });
+        }
+        
+        logDebug('[CREATE-POST] === FIN CRÉATION POST (ERREUR) ===');
       }
     },
 
@@ -318,21 +461,55 @@ export default {
       if (!this.isEditValid) return
 
       try {
+        // Vérifier que l'utilisateur est connecté
+        if (!this.$authCustom.isAuthenticated()) {
+          this.$toast.error('Vous devez être connecté pour modifier un post');
+          setTimeout(() => {
+            window.location.href = '/auth/login';
+          }, 300);
+          return;
+        }
+        
+        console.log('[UPDATE-POST] Tentative de mise à jour du post...');
+
+        // Utiliser l'axios configuré globalement
         const response = await this.$axios.put(`/posts/${this.editingPost.id}`, {
           titre: this.editingPost.titre,
           contenu: this.editingPost.contenu,
           categorieId: this.editingPost.categorieId,
           estAnonyme: this.editingPost.estAnonyme
-        })
+        });
 
-        this.$toast.success('Post mis à jour avec succès')
-        this.showEditModal = false
+        console.log('[UPDATE-POST] Post mis à jour avec succès:', response);
+        this.$toast.success('Post mis à jour avec succès');
+        this.showEditModal = false;
 
         // Recharger les posts
-        await this.loadPosts()
+        await this.loadPosts();
       } catch (error) {
-        console.error('Erreur lors de la mise à jour du post:', error)
-        this.$toast.error('Erreur lors de la mise à jour du post')
+        console.error('[UPDATE-POST] Erreur lors de la mise à jour du post:', error);
+        
+        if (error.response && error.response.status === 401) {
+          console.log('[UPDATE-POST] Erreur 401 détectée, vérification du token...');
+          
+          // Vérifier si le token est vraiment invalide
+          try {
+            const user = await this.$authCustom.fetchUser();
+            if (user) {
+              console.log('[UPDATE-POST] Token valide, erreur 401 temporaire');
+              this.$toast.error('Erreur temporaire. Veuillez réessayer.');
+              return;
+            }
+          } catch (fetchError) {
+            console.log('[UPDATE-POST] Token invalide confirmé, déconnexion nécessaire');
+          }
+          
+          this.$toast.error('Votre session a expiré. Veuillez vous reconnecter.');
+          this.$authCustom.logout();
+        } else {
+          const errorMessage = error.response?.data?.message || error.message || 'Erreur inconnue';
+          this.$toast.error('Erreur lors de la mise à jour du post: ' + errorMessage);
+        }
       }
     },
 
@@ -342,20 +519,54 @@ export default {
     },
 
     async deletePost() {
-      if (!this.postToDelete) return
+      if (!this.postToDelete) return;
 
       try {
-        await this.$axios.delete(`/posts/${this.postToDelete.id}`)
+        // Vérifier que l'utilisateur est connecté
+        if (!this.$authCustom.isAuthenticated()) {
+          this.$toast.error('Vous devez être connecté pour supprimer un post');
+          setTimeout(() => {
+            window.location.href = '/auth/login';
+          }, 300);
+          return;
+        }
+        
+        console.log('[DELETE-POST] Tentative de suppression du post...');
 
-        this.$toast.success('Post supprimé avec succès')
-        this.showDeleteModal = false
-        this.postToDelete = null
+        // Utiliser l'axios configuré globalement
+        await this.$axios.delete(`/posts/${this.postToDelete.id}`);
+
+        console.log('[DELETE-POST] Post supprimé avec succès');
+        this.$toast.success('Post supprimé avec succès');
+        this.showDeleteModal = false;
+        this.postToDelete = null;
 
         // Recharger les posts
-        await this.loadPosts()
+        await this.loadPosts();
       } catch (error) {
-        console.error('Erreur lors de la suppression du post:', error)
-        this.$toast.error('Erreur lors de la suppression du post')
+        console.error('[DELETE-POST] Erreur lors de la suppression du post:', error);
+        
+        if (error.response && error.response.status === 401) {
+          console.log('[DELETE-POST] Erreur 401 détectée, vérification du token...');
+          
+          // Vérifier si le token est vraiment invalide
+          try {
+            const user = await this.$authCustom.fetchUser();
+            if (user) {
+              console.log('[DELETE-POST] Token valide, erreur 401 temporaire');
+              this.$toast.error('Erreur temporaire. Veuillez réessayer.');
+              return;
+            }
+          } catch (fetchError) {
+            console.log('[DELETE-POST] Token invalide confirmé, déconnexion nécessaire');
+          }
+          
+          this.$toast.error('Votre session a expiré. Veuillez vous reconnecter.');
+          this.$authCustom.logout();
+        } else {
+          const errorMessage = error.response?.data?.message || error.message || 'Erreur inconnue';
+          this.$toast.error('Erreur lors de la suppression du post: ' + errorMessage);
+        }
       }
     }
   }
@@ -391,76 +602,91 @@ h1 {
 .loading i,
 .no-posts i {
   font-size: 3rem;
-  margin-bottom: 1rem;
-  color: var(--primary-color);
+  margin-bottom: 20px;
+  color: #ccc;
 }
 
 .no-posts p {
   margin-bottom: 1.5rem;
-  color: #888;
+  color: #666;
+}
+
+.create-post-btn {
+  background: var(--primary-color);
+  border: none;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 20px;
+  transition: all 0.3s ease;
+}
+
+.create-post-btn:hover {
+  transform: translateY(-2px);
 }
 
 .pagination {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  margin-top: 2rem;
+  gap: 20px;
+  margin-top: 30px;
+  padding: 20px;
 }
 
 .pagination button {
-  background-color: var(--post-background);
+  background: var(--primary-color);
   border: none;
-  padding: 0.5rem 1rem;
+  color: white;
+  padding: 10px 20px;
   border-radius: 20px;
   cursor: pointer;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: all 0.2s ease;
-}
-
-.pagination button:hover:not(:disabled) {
-  background-color: var(--primary-color);
-  color: var(--background-color);
 }
 
 .pagination button:disabled {
-  opacity: 0.5;
+  background: #ccc;
   cursor: not-allowed;
 }
 
-.page-info {
-  color: #888;
+.pagination button:not(:disabled):hover {
+  transform: translateY(-2px);
 }
 
-.new-post-btn {
+.page-info {
+  font-weight: 600;
+  color: #333;
+}
+
+.floating-new-post-btn {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  bottom: 30px;
+  right: 30px;
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background-color: var(--primary-color);
-  color: var(--background-color);
   border: none;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 1.5rem;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s ease;
   z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.new-post-btn::before {
+.floating-new-post-btn::before {
   content: '+';
   font-size: 2rem;
   font-weight: bold;
 }
 
-.new-post-btn:hover {
-  transform: scale(1.1) rotate(90deg);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+.floating-new-post-btn:hover {
+  transform: scale(1.1);
 }
 
 /* Styles pour les modals */
@@ -470,7 +696,7 @@ h1 {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  background: rgba(0,0,0,0.5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -478,9 +704,9 @@ h1 {
 }
 
 .modal-content {
-  background-color: var(--post-background);
-  border-radius: 8px;
-  padding: 2rem;
+  background: var(--post-background);
+  padding: 30px;
+  border-radius: 15px;
   width: 90%;
   max-width: 600px;
   max-height: 90vh;
@@ -490,11 +716,12 @@ h1 {
 
 .close-modal {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
-  font-size: 1.5rem;
+  top: 15px;
+  right: 20px;
+  font-size: 2rem;
   cursor: pointer;
-  color: #888;
+  color: var(--text-color);
+  transition: color 0.3s ease;
 }
 
 .close-modal:hover {
@@ -502,149 +729,140 @@ h1 {
 }
 
 .post-editor {
-  margin-top: 1.5rem;
+  margin: 20px 0;
 }
 
 .form-group {
-  margin-bottom: 1rem;
+  margin-bottom: 20px;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 0.5rem;
-  color: #888;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 0.8rem;
-  border-radius: 5px;
-  border: none;
-  background-color: var(--background-color);
+  margin-bottom: 8px;
+  font-weight: 600;
   color: var(--text-color);
 }
 
-.category-selector {
-  margin-bottom: 1rem;
-}
-
-.category-selector label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #888;
-}
-
-.category-selector select {
+.form-group input,
+.form-group select {
   width: 100%;
-  padding: 0.8rem;
-  border-radius: 5px;
-  border: none;
+  padding: 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
   background-color: var(--background-color);
   color: var(--text-color);
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary-color);
 }
 
 .editor-toolbar {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 0.5rem;
+  margin-bottom: 10px;
 }
 
 .char-counter {
-  font-size: 0.8rem;
-  color: #888;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .char-counter.limit-near {
-  color: orange;
+  color: #f39c12;
 }
 
 .char-counter.limit-reached {
-  color: red;
+  color: #e74c3c;
 }
 
 textarea {
   width: 100%;
-  min-height: 200px;
-  padding: 0.8rem;
-  border-radius: 5px;
-  border: none;
+  min-height: 120px;
+  padding: 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
   background-color: var(--background-color);
   color: var(--text-color);
   resize: vertical;
-  margin-bottom: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
 }
 
 .anonymous-option {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 8px;
+  margin-top: 15px;
+  color: var(--text-color);
+}
+
+.anonymous-option input[type="checkbox"] {
+  width: auto;
 }
 
 .submit-post-btn {
-  width: 100%;
-  padding: 0.8rem;
-  border-radius: 20px;
+  background: var(--primary-color);
   border: none;
-  background-color: var(--primary-color);
-  color: var(--background-color);
-  font-weight: bold;
+  color: white;
+  padding: 12px 30px;
+  border-radius: 25px;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.submit-post-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  width: 100%;
 }
 
 .submit-post-btn:disabled {
-  opacity: 0.5;
+  background: #ccc;
   cursor: not-allowed;
 }
 
-.edit-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.8rem;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-  color: #888;
-}
-
-.edit-info i {
-  color: var(--primary-color);
+.submit-post-btn:not(:disabled):hover {
+  transform: translateY(-2px);
 }
 
 .confirm-delete-btn {
-  background-color: #ff4444;
-  color: white;
+  background: #e74c3c;
   border: none;
-  padding: 0.8rem 1.5rem;
-  border-radius: 20px;
+  color: white;
+  padding: 12px 30px;
+  border-radius: 25px;
   cursor: pointer;
-  font-weight: bold;
-  transition: all 0.2s ease;
-  margin-top: 1rem;
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  width: 100%;
 }
 
 .confirm-delete-btn:hover {
-  background-color: #ff6666;
+  background: #c0392b;
   transform: translateY(-2px);
 }
 
 @media (max-width: 768px) {
-  .home-page {
-    padding: 1rem;
-    padding-top: 4rem;
+  .floating-new-post-btn {
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
   }
 
   .modal-content {
     width: 95%;
-    padding: 1.5rem;
+    padding: 20px;
   }
 }
 </style>

@@ -9,14 +9,15 @@ router.get('/', postController.getAllPosts);
 router.get('/search', postController.search);
 router.get('/category/:categorieId', postController.getByCategory);
 router.get('/user/:utilisateurId', postController.getByUser);
-router.get('/:id', postController.getPostById);
+router.get('/:id', postController.getById);
 
 // Routes protégées par authentification
 router.post('/', authMiddleware, postController.createPost);
-router.put('/:id', authMiddleware, postController.updatePost);
-router.delete('/:id', authMiddleware, postController.deletePost);
+router.put('/:id', authMiddleware, postController.update);
+router.delete('/:id', authMiddleware, postController.delete);
 router.post('/:id/like', authMiddleware, postController.addLike);
 router.delete('/:id/like', authMiddleware, postController.removeLike);
+router.get('/:id/like/check', authMiddleware, postController.checkLike);
 
 // Routes pour les commentaires d'un post
 router.get('/:postId/comments', commentController.getByPostId);

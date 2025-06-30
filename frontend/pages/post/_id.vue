@@ -1,186 +1,192 @@
 <template>
-  <div class="post-detail-page">
+  <div class="post-page">
     <div v-if="loading" class="loading">
       <i class="fas fa-spinner fa-spin"></i>
       <span>Chargement du post...</span>
     </div>
-    
-    <div v-else-if="!post" class="not-found">
+
+    <div v-else-if="!post" class="error">
       <i class="fas fa-exclamation-triangle"></i>
       <h2>Post non trouvé</h2>
-      <p>Le post que vous recherchez n'existe pas ou a été supprimé.</p>
-      <button class="back-btn" @click="$router.push('/')">
+      <p>Ce post n'existe pas ou a été supprimé.</p>
+      <button @click="$router.push('/')" class="back-btn">
+        <i class="fas fa-arrow-left"></i>
         Retour à l'accueil
       </button>
     </div>
-    
-    <div v-else class="post-container">
-      <div class="post-navigation">
-        <button class="back-btn" @click="$router.push('/')">
-          <i class="fas fa-arrow-left"></i> Retour
+
+    <div v-else class="post-detail">
+      <!-- Bouton retour -->
+      <div class="back-navigation">
+        <button @click="$router.back()" class="back-btn">
+          <i class="fas fa-arrow-left"></i>
+          Retour
         </button>
+        <div class="post-actions" v-if="isAuthor">
+          <button @click="editPost" class="edit-btn">
+            <i class="fas fa-edit"></i>
+            Modifier
+          </button>
+          <button @click="confirmDelete" class="delete-btn">
+            <i class="fas fa-trash"></i>
+            Supprimer
+          </button>
+        </div>
       </div>
-      
-      <div class="post-detail">
+
+      <!-- Post principal -->
+      <div class="post-card">
         <div class="post-header">
           <div class="post-author">
             <i class="fas" :class="post.est_anonyme ? 'fa-mask' : 'fa-user-circle'"></i>
-            <span v-if="post.est_anonyme" class="anonymous-author">Anonyme 🎭</span>
-            <span v-else>{{ post.auteur }}</span>
-            <span class="post-time">{{ formatDate(post.date_creation) }}</span>
+            <div class="author-info">
+              <span class="author-name">
+                {{ post.est_anonyme ? 'Anonyme' : post.auteur }}
+                <span v-if="post.est_anonyme" class="anonymous-badge">🎭</span>
+              </span>
+              <span class="post-date">{{ formatDate(post.date_creation) }}</span>
+            </div>
           </div>
           <div class="post-category">
+            <i class="fas fa-tag"></i>
             <span>{{ post.categorie_nom }}</span>
           </div>
         </div>
-        
+
         <h1 class="post-title">{{ post.titre }}</h1>
-        
-        <div class="post-content">{{ post.contenu }}</div>
-        
-        <div v-if="post.date_modification" class="post-edited-info">
+
+        <div class="post-content">
+          <p>{{ post.contenu }}</p>
+        </div>
+
+        <div v-if="post.date_modification && post.date_modification !== post.date_creation" class="post-edited">
+          <i class="fas fa-edit"></i>
           Modifié le {{ formatDate(post.date_modification) }}
         </div>
-        
-        <div class="post-actions">
+
+        <div class="post-stats">
           <button 
-            class="like-btn" 
-            :class="{ 'liked': hasLiked }" 
-            @click="toggleLike"
+            v-if="$authCustom.isAuthenticated()" 
+            @click="toggleLike" 
+            :class="['like-btn', { 'liked': hasLiked }]"
+            :disabled="likingInProgress"
           >
             <i class="fas fa-heart"></i>
-            <span class="likes-count">{{ likeCount }}</span>
+            <span>{{ likeCount }}</span>
           </button>
           
-          <div class="comments-count">
-            <i class="fas fa-comment"></i>
-            <span>{{ commentCount }} commentaire{{ commentCount !== 1 ? 's' : '' }}</span>
+          <div v-else class="like-display">
+            <i class="fas fa-heart"></i>
+            <span>{{ likeCount }}</span>
           </div>
-          
-          <button 
-            v-if="isAuthor" 
-            class="edit-post-btn"
-            @click="showEditModal = true"
-          >
-            <i class="fas fa-edit"></i>
-            <span>Modifier</span>
+
+          <div class="comment-count">
+            <i class="fas fa-comment"></i>
+            <span>{{ totalComments }} commentaire{{ totalComments !== 1 ? 's' : '' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section des commentaires -->
+      <CommentsSection 
+        :post-id="postId" 
+        @comment-added="onCommentAdded"
+        @comment-deleted="onCommentDeleted"
+      />
+    </div>
+
+    <!-- Modal d'édition -->
+    <div v-if="showEditModal" class="modal-overlay" @click="closeEditModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3><i class="fas fa-edit"></i> Modifier le post</h3>
+          <button @click="closeEditModal" class="close-btn">
+            <i class="fas fa-times"></i>
           </button>
-          
+        </div>
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editTitle">Titre</label>
+            <input 
+              id="editTitle"
+              v-model="editingPost.titre" 
+              type="text" 
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="editContent">Contenu</label>
+            <textarea 
+              id="editContent"
+              v-model="editingPost.contenu" 
+              rows="6"
+              :maxlength="maxContentLength"
+              required
+            ></textarea>
+            <div class="char-counter" :class="getEditCounterClass">
+              {{ editingPost.contenu.length }} / {{ maxContentLength }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="editingPost.estAnonyme"
+              />
+              <span>Publier anonymement</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button @click="closeEditModal" class="cancel-btn">
+            Annuler
+          </button>
           <button 
-            v-if="isAuthor" 
-            class="delete-post-btn"
-            @click="showDeleteModal = true"
+            @click="updatePost" 
+            :disabled="!isEditValid || updatingPost"
+            class="submit-btn"
           >
-            <i class="fas fa-trash"></i>
-            <span>Supprimer</span>
+            <i class="fas fa-save"></i>
+            {{ updatingPost ? 'Mise à jour...' : 'Sauvegarder' }}
           </button>
         </div>
       </div>
-      
-      <div class="comments-section">
-        <h2>Commentaires</h2>
-        
-        <div v-if="$auth.loggedIn" class="comment-form">
-          <textarea 
-            v-model="newComment.contenu" 
-            placeholder="Ajouter un commentaire..."
-            maxlength="1000"
-          ></textarea>
-          
-          <div class="comment-form-actions">
-            <div class="anonymous-option">
-              <input 
-                type="checkbox" 
-                id="anonymousComment" 
-                v-model="newComment.estAnonyme"
-              />
-              <label for="anonymousComment">Commenter anonymement</label>
-            </div>
-            
-            <button 
-              class="submit-comment-btn" 
-              :disabled="!newComment.contenu.trim()"
-              @click="addComment"
-            >
-              Commenter
-            </button>
-          </div>
-        </div>
-        
-        <div v-else class="login-to-comment">
-          <p>Connectez-vous pour ajouter un commentaire</p>
-          <button @click="$router.push('/auth/login')" class="login-btn">
-            Se connecter
+    </div>
+
+    <!-- Modal de suppression -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+      <div class="modal-content delete-modal" @click.stop>
+        <div class="modal-header">
+          <h3><i class="fas fa-exclamation-triangle"></i> Supprimer le post</h3>
+          <button @click="closeDeleteModal" class="close-btn">
+            <i class="fas fa-times"></i>
           </button>
         </div>
-        
-        <div v-if="loadingComments" class="loading">
-          <i class="fas fa-spinner fa-spin"></i>
-          <span>Chargement des commentaires...</span>
+
+        <div class="modal-body">
+          <p>Êtes-vous sûr de vouloir supprimer ce post ?</p>
+          <div class="post-preview">
+            <strong>{{ post.titre }}</strong>
+          </div>
+          <p class="warning">Cette action est irréversible et supprimera également tous les commentaires associés.</p>
         </div>
-        
-        <div v-else-if="comments.length === 0" class="no-comments">
-          <i class="fas fa-comments"></i>
-          <p>Aucun commentaire pour le moment</p>
-          <p v-if="$auth.loggedIn">Soyez le premier à commenter !</p>
-        </div>
-        
-        <div v-else class="comments-list">
-          <div 
-            v-for="comment in comments" 
-            :key="comment.id" 
-            class="comment"
-            :class="{ 'by-author': comment.auteur_id === post.auteur_id && !post.est_anonyme && !comment.est_anonyme }"
+
+        <div class="modal-footer">
+          <button @click="closeDeleteModal" class="cancel-btn">
+            Annuler
+          </button>
+          <button 
+            @click="deletePost" 
+            :disabled="deletingPost"
+            class="delete-btn"
           >
-            <div class="comment-header">
-              <div class="comment-author">
-                <i class="fas" :class="comment.est_anonyme ? 'fa-mask' : 'fa-user-circle'"></i>
-                <span v-if="comment.est_anonyme" class="anonymous-author">Anonyme 🎭</span>
-                <span v-else>{{ comment.auteur }}</span>
-                <span class="comment-time">{{ formatDate(comment.date_creation) }}</span>
-              </div>
-            </div>
-            
-            <div class="comment-content">{{ comment.contenu }}</div>
-            
-            <div v-if="comment.date_modification" class="comment-edited-info">
-              Modifié le {{ formatDate(comment.date_modification) }}
-            </div>
-            
-            <div class="comment-actions">
-              <button 
-                class="like-btn" 
-                :class="{ 'liked': comment.has_liked }" 
-                @click="toggleCommentLike(comment)"
-              >
-                <i class="fas fa-heart"></i>
-                <span>{{ comment.nombre_likes || 0 }}</span>
-              </button>
-              
-              <button 
-                v-if="$auth.loggedIn && $auth.user.id === comment.auteur_id" 
-                class="edit-comment-btn"
-                @click="editComment(comment)"
-              >
-                <i class="fas fa-edit"></i>
-              </button>
-              
-              <button 
-                v-if="$auth.loggedIn && $auth.user.id === comment.auteur_id" 
-                class="delete-comment-btn"
-                @click="confirmDeleteComment(comment)"
-              >
-                <i class="fas fa-trash"></i>
-              </button>
-            </div>
-          </div>
-          
-          <div v-if="hasMoreComments" class="load-more">
-            <button @click="loadMoreComments" class="load-more-btn">
-              <i v-if="loadingMoreComments" class="fas fa-spinner fa-spin"></i>
-              <span v-else>Charger plus de commentaires</span>
-            </button>
-          </div>
+            <i class="fas fa-trash"></i>
+            {{ deletingPost ? 'Suppression...' : 'Supprimer' }}
+          </button>
         </div>
       </div>
     </div>
@@ -188,484 +194,697 @@
 </template>
 
 <script>
+import CommentsSection from '~/components/CommentsSection.vue'
+
 export default {
+  name: 'PostDetail',
+  components: {
+    CommentsSection
+  },
+  
+  head() {
+    return {
+      title: this.post ? `${this.post.titre} - Ruche` : 'Post - Ruche',
+      meta: [
+        { hid: 'description', name: 'description', content: this.post ? this.post.contenu.substring(0, 160) : 'Post sur Ruche' }
+      ]
+    }
+  },
+
   data() {
     return {
       post: null,
-      comments: [],
       loading: true,
-      loadingComments: true,
-      loadingMoreComments: false,
       hasLiked: false,
       likeCount: 0,
-      commentCount: 0,
-      commentsPage: 1,
-      commentsLimit: 10,
-      hasMoreComments: false,
-      newComment: {
+      totalComments: 0,
+      likingInProgress: false,
+      showEditModal: false,
+      showDeleteModal: false,
+      updatingPost: false,
+      deletingPost: false,
+      editingPost: {
+        titre: '',
         contenu: '',
         estAnonyme: false
       },
-      showEditModal: false,
-      showDeleteModal: false,
-      editingComment: null
+      maxContentLength: 5000
     }
   },
-  
+
   computed: {
-    isAuthor() {
-      return this.$auth.loggedIn && this.post && this.$auth.user.id === this.post.auteur_id
-    },
-    
     postId() {
       return this.$route.params.id
+    },
+
+    isAuthor() {
+      return this.$authCustom.isAuthenticated() && 
+             this.post && 
+             this.post.auteur_id && 
+             this.$authCustom.getUser()?.id === this.post.auteur_id
+    },
+
+    isEditValid() {
+      return this.editingPost.titre.trim() && this.editingPost.contenu.trim()
+    },
+
+    getEditCounterClass() {
+      const length = this.editingPost.contenu.length
+      if (length > this.maxContentLength * 0.9) return 'limit-near'
+      if (length >= this.maxContentLength) return 'limit-reached'
+      return ''
     }
   },
-  
+
   async mounted() {
     await this.loadPost()
-    await this.loadComments()
   },
-  
+
   methods: {
-    formatDate(date) {
-      return this.$options.filters.formatDate(date)
-    },
-    
     async loadPost() {
+      this.loading = true
       try {
-        this.loading = true
         const response = await this.$axios.get(`/posts/${this.postId}`)
         this.post = response.data.post
         this.likeCount = this.post.nombre_likes || 0
-        this.commentCount = this.post.nombre_commentaires || 0
-        
-        if (this.$auth.loggedIn) {
-          const likeResponse = await this.$axios.get(`/posts/${this.postId}/like`)
-          this.hasLiked = likeResponse.data.hasLiked
+        this.totalComments = this.post.nombre_commentaires || 0
+
+        if (this.$authCustom.isAuthenticated()) {
+          await this.checkLikeStatus()
         }
       } catch (error) {
         console.error('Erreur lors du chargement du post:', error)
-        this.post = null
+        if (error.response?.status === 404) {
+          this.post = null
+        } else {
+          this.$toast.error('Erreur lors du chargement du post')
+        }
       } finally {
         this.loading = false
       }
     },
-    
-    async loadComments(reset = false) {
+
+    async checkLikeStatus() {
       try {
-        if (reset) {
-          this.commentsPage = 1
-          this.comments = []
-          this.loadingComments = true
-        }
-        
-        const response = await this.$axios.get(`/posts/${this.postId}/comments`, {
-          params: {
-            page: this.commentsPage,
-            limit: this.commentsLimit
-          }
-        })
-        
-        if (reset) {
-          this.comments = response.data.comments
-        } else {
-          this.comments = [...this.comments, ...response.data.comments]
-        }
-        
-        this.hasMoreComments = response.data.comments.length === this.commentsLimit
-        this.commentCount = response.data.totalItems || this.comments.length
+        const response = await this.$authCustom.makeRequest(`/posts/${this.postId}/like/check`)
+        this.hasLiked = response.data.hasLiked
       } catch (error) {
-        console.error('Erreur lors du chargement des commentaires:', error)
-        this.$toast.error('Impossible de charger les commentaires')
-      } finally {
-        this.loadingComments = false
-        this.loadingMoreComments = false
+        console.error('Erreur lors de la vérification du like:', error)
       }
     },
-    
-    async loadMoreComments() {
-      if (this.loadingMoreComments) return
-      
-      this.loadingMoreComments = true
-      this.commentsPage++
-      await this.loadComments()
-    },
-    
+
     async toggleLike() {
-      if (!this.$auth.loggedIn) {
-        this.$router.push('/auth/login')
-        return
-      }
+      if (this.likingInProgress) return
       
+      this.likingInProgress = true
       try {
         if (this.hasLiked) {
-          await this.$axios.delete(`/posts/${this.postId}/like`)
-          this.likeCount--
+          await this.$authCustom.makeRequest(`/posts/${this.postId}/like`, {
+            method: 'DELETE'
+          })
+          this.hasLiked = false
+          this.likeCount = Math.max(0, this.likeCount - 1)
         } else {
-          await this.$axios.post(`/posts/${this.postId}/like`)
+          await this.$authCustom.makeRequest(`/posts/${this.postId}/like`, {
+            method: 'POST'
+          })
+          this.hasLiked = true
           this.likeCount++
         }
-        
-        this.hasLiked = !this.hasLiked
       } catch (error) {
-        console.error('Erreur lors de la gestion du like:', error)
-        this.$toast.error('Impossible de gérer le like')
+        console.error('Erreur lors du like/unlike:', error)
+        this.$toast.error('Erreur lors de l\'action')
+      } finally {
+        this.likingInProgress = false
       }
     },
-    
-    async addComment() {
-      if (!this.newComment.contenu.trim()) return
-      
+
+    formatDate(dateString) {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    },
+
+    editPost() {
+      this.editingPost = {
+        titre: this.post.titre,
+        contenu: this.post.contenu,
+        estAnonyme: this.post.est_anonyme
+      }
+      this.showEditModal = true
+    },
+
+    closeEditModal() {
+      this.showEditModal = false
+      this.editingPost = {
+        titre: '',
+        contenu: '',
+        estAnonyme: false
+      }
+    },
+
+    async updatePost() {
+      if (!this.isEditValid || this.updatingPost) return
+
+      this.updatingPost = true
       try {
-        await this.$axios.post(`/posts/${this.postId}/comments`, {
-          contenu: this.newComment.contenu,
-          estAnonyme: this.newComment.estAnonyme
+        const response = await this.$authCustom.makeRequest(`/posts/${this.postId}`, {
+          method: 'PUT',
+          data: {
+            titre: this.editingPost.titre.trim(),
+            contenu: this.editingPost.contenu.trim(),
+            categorieId: this.post.categorie_id,
+            estAnonyme: this.editingPost.estAnonyme
+          }
         })
-        
-        this.$toast.success('Commentaire ajouté avec succès')
-        this.newComment.contenu = ''
-        this.newComment.estAnonyme = false
-        
-        // Recharger les commentaires
-        await this.loadComments(true)
-        
-        // Mettre à jour le compteur de commentaires
-        this.commentCount++
+
+        // Mettre à jour les données locales
+        this.post.titre = this.editingPost.titre
+        this.post.contenu = this.editingPost.contenu
+        this.post.est_anonyme = this.editingPost.estAnonyme
+        this.post.date_modification = new Date().toISOString()
+
+        this.closeEditModal()
+        this.$toast.success('Post modifié avec succès !')
       } catch (error) {
-        console.error('Erreur lors de l\'ajout du commentaire:', error)
-        this.$toast.error('Impossible d\'ajouter le commentaire')
+        console.error('Erreur lors de la modification du post:', error)
+        this.$toast.error('Erreur lors de la modification du post')
+      } finally {
+        this.updatingPost = false
       }
     },
-    
-    async toggleCommentLike(comment) {
-      if (!this.$auth.loggedIn) {
-        this.$router.push('/auth/login')
-        return
-      }
-      
+
+    confirmDelete() {
+      this.showDeleteModal = true
+    },
+
+    closeDeleteModal() {
+      this.showDeleteModal = false
+    },
+
+    async deletePost() {
+      if (this.deletingPost) return
+
+      this.deletingPost = true
       try {
-        if (comment.has_liked) {
-          await this.$axios.delete(`/comments/${comment.id}/like`)
-          comment.nombre_likes--
-        } else {
-          await this.$axios.post(`/comments/${comment.id}/like`)
-          comment.nombre_likes++
-        }
-        
-        comment.has_liked = !comment.has_liked
+        await this.$authCustom.makeRequest(`/posts/${this.postId}`, {
+          method: 'DELETE'
+        })
+
+        this.$toast.success('Post supprimé avec succès !')
+        this.$router.push('/')
       } catch (error) {
-        console.error('Erreur lors de la gestion du like du commentaire:', error)
-        this.$toast.error('Impossible de gérer le like')
+        console.error('Erreur lors de la suppression du post:', error)
+        this.$toast.error('Erreur lors de la suppression du post')
+      } finally {
+        this.deletingPost = false
       }
+    },
+
+    onCommentAdded(comment) {
+      this.totalComments++
+    },
+
+    onCommentDeleted(comment) {
+      this.totalComments = Math.max(0, this.totalComments - 1)
     }
   }
 }
 </script>
 
 <style scoped>
-.post-detail-page {
+.post-page {
   max-width: 800px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 20px;
+  min-height: 100vh;
 }
 
-.post-navigation {
-  margin-bottom: 1.5rem;
+.loading,
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-color);
+}
+
+.loading i,
+.error i {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  color: var(--primary-color);
+}
+
+.error h2 {
+  margin-bottom: 12px;
+  color: var(--text-color);
+}
+
+.back-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
 }
 
 .back-btn {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-radius: 5px;
-  transition: all 0.2s ease;
+  gap: 8px;
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .back-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
 }
 
-.post-detail {
+.post-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.edit-btn,
+.delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.edit-btn {
+  background-color: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+}
+
+.edit-btn:hover {
+  background-color: #3498db;
+  color: white;
+}
+
+.delete-btn {
+  background-color: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+}
+
+.delete-btn:hover {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.post-card {
   background-color: var(--post-background);
-  border-radius: 10px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
 }
 
 .post-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  margin-bottom: 20px;
 }
 
 .post-author {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 12px;
 }
 
-.post-time {
-  font-size: 0.8rem;
-  color: #888;
-  margin-left: 0.5rem;
-}
-
-.post-category {
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 0.3rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
+.post-author i {
+  font-size: 2rem;
   color: var(--primary-color);
 }
 
-.post-title {
-  margin-bottom: 1rem;
-  font-size: 1.5rem;
-}
-
-.post-content {
-  margin-bottom: 1.5rem;
-  white-space: pre-line;
-}
-
-.post-edited-info {
-  font-size: 0.8rem;
-  color: #888;
-  margin-bottom: 1rem;
-  font-style: italic;
-}
-
-.post-actions {
-  display: flex;
-  gap: 1rem;
-  color: #888;
-}
-
-.post-actions button, .comments-count {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.5rem;
-  border-radius: 5px;
-  transition: all 0.2s ease;
-}
-
-.post-actions button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.like-btn.liked {
-  color: #ff4444;
-}
-
-.comments-count {
-  cursor: default;
-}
-
-.comments-section {
-  margin-top: 2rem;
-}
-
-.comments-section h2 {
-  margin-bottom: 1.5rem;
-  font-size: 1.3rem;
-}
-
-.comment-form {
-  margin-bottom: 2rem;
-}
-
-.comment-form textarea {
-  width: 100%;
-  min-height: 100px;
-  padding: 0.8rem;
-  border-radius: 5px;
-  border: none;
-  background-color: var(--post-background);
-  color: var(--text-color);
-  resize: vertical;
-  margin-bottom: 1rem;
-}
-
-.comment-form-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.anonymous-option {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.submit-comment-btn {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  border: none;
-  background-color: var(--primary-color);
-  color: var(--background-color);
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.submit-comment-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.submit-comment-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.login-to-comment {
-  text-align: center;
-  padding: 1.5rem;
-  background-color: var(--post-background);
-  border-radius: 10px;
-  margin-bottom: 2rem;
-}
-
-.login-to-comment p {
-  margin-bottom: 1rem;
-  color: #888;
-}
-
-.login-btn {
-  padding: 0.5rem 1.5rem;
-  border-radius: 20px;
-  border: none;
-  background-color: var(--primary-color);
-  color: var(--background-color);
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.login-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.comments-list {
+.author-info {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 4px;
 }
 
-.comment {
-  background-color: var(--post-background);
-  border-radius: 10px;
-  padding: 1rem;
-}
-
-.comment.by-author {
-  border-left: 3px solid var(--primary-color);
-}
-
-.comment-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.comment-author {
+.author-name {
+  font-weight: 600;
+  color: var(--text-color);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
 }
 
-.comment-time {
-  font-size: 0.8rem;
-  color: #888;
-  margin-left: 0.5rem;
-}
-
-.comment-content {
-  margin-bottom: 0.5rem;
-  white-space: pre-line;
-}
-
-.comment-edited-info {
-  font-size: 0.8rem;
-  color: #888;
-  margin-bottom: 0.5rem;
-  font-style: italic;
-}
-
-.comment-actions {
-  display: flex;
-  gap: 0.5rem;
-  color: #888;
-}
-
-.comment-actions button {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: 5px;
-  transition: all 0.2s ease;
+.anonymous-badge {
   font-size: 0.9rem;
 }
 
-.comment-actions button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.post-date {
+  font-size: 0.9rem;
+  color: var(--text-muted);
 }
 
-.load-more {
-  text-align: center;
-  margin-top: 1.5rem;
-}
-
-.load-more-btn {
-  padding: 0.5rem 1.5rem;
+.post-category {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(52, 152, 219, 0.1);
+  color: var(--primary-color);
+  padding: 6px 12px;
   border-radius: 20px;
-  border: none;
-  background-color: var(--post-background);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.post-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 16px;
   color: var(--text-color);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  line-height: 1.3;
 }
 
-.load-more-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+.post-content {
+  margin-bottom: 20px;
 }
 
-.anonymous-author {
+.post-content p {
+  line-height: 1.6;
+  color: var(--text-color);
+  white-space: pre-line;
+  margin: 0;
+}
+
+.post-edited {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
   font-style: italic;
+  margin-bottom: 16px;
+}
+
+.post-stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.like-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+}
+
+.like-btn:hover {
+  background-color: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+}
+
+.like-btn.liked {
+  color: #e74c3c;
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+.like-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.like-display,
+.comment-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+/* Styles des modals */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background-color: var(--post-background);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.close-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-color);
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.char-counter {
+  text-align: right;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.char-counter.limit-near {
+  color: #f39c12;
+}
+
+.char-counter.limit-reached {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin: 0 !important;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto !important;
+  margin: 0;
+}
+
+.post-preview {
+  background-color: var(--background-color);
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--primary-color);
+  margin: 12px 0;
+  font-weight: bold;
+}
+
+.warning {
+  color: #e74c3c;
+  font-weight: bold;
+  margin-top: 12px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.cancel-btn,
+.submit-btn,
+.delete-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cancel-btn {
+  background-color: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.cancel-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.submit-btn {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.delete-btn {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.delete-btn:hover {
+  background-color: #c0392b;
+}
+
+.delete-modal .modal-body {
+  text-align: center;
 }
 
 @media (max-width: 768px) {
-  .post-detail-page {
-    padding: 1rem;
+  .post-page {
+    padding: 12px;
   }
-  
-  .comment-form-actions {
+
+  .back-navigation {
     flex-direction: column;
-    gap: 1rem;
+    gap: 12px;
+    align-items: stretch;
   }
-  
-  .submit-comment-btn {
+
+  .post-actions {
+    justify-content: center;
+  }
+
+  .post-card {
+    padding: 16px;
+  }
+
+  .post-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .post-title {
+    font-size: 1.5rem;
+  }
+
+  .post-stats {
+    justify-content: center;
+  }
+
+  .modal-content {
+    width: 95%;
+    margin: 20px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .cancel-btn,
+  .submit-btn,
+  .delete-btn {
     width: 100%;
+    justify-content: center;
   }
 }
 </style> 

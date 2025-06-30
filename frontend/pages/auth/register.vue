@@ -14,16 +14,16 @@
           <label for="username">Nom d'utilisateur</label>
           <input type="text" id="username" v-model="form.username" required
             placeholder="Choisissez un nom d'utilisateur" />
-          <div v-if="validationErrors.username" class="field-error">
-            {{ validationErrors.username }}
+          <div v-if="errors.username" class="field-error">
+            {{ errors.username }}
           </div>
         </div>
 
         <div class="form-group">
           <label for="email">Email</label>
           <input type="email" id="email" v-model="form.email" required placeholder="Votre adresse email" />
-          <div v-if="validationErrors.email" class="field-error">
-            {{ validationErrors.email }}
+          <div v-if="errors.email" class="field-error">
+            {{ errors.email }}
           </div>
         </div>
 
@@ -36,8 +36,8 @@
               <i class="fas" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
             </button>
           </div>
-          <div v-if="validationErrors.password" class="field-error">
-            {{ validationErrors.password }}
+          <div v-if="errors.password" class="field-error">
+            {{ errors.password }}
           </div>
           <div class="password-requirements">
             <p>Le mot de passe doit contenir :</p>
@@ -51,15 +51,15 @@
 
         <div class="form-group">
           <label for="confirmPassword">Confirmer le mot de passe</label>
-          <input type="password" id="confirmPassword" v-model="form.confirmPassword" required
+          <input :type="showPassword ? 'text' : 'password'" id="confirmPassword" v-model="form.confirmPassword" required
             placeholder="Confirmez votre mot de passe" />
-          <div v-if="validationErrors.confirmPassword" class="field-error">
-            {{ validationErrors.confirmPassword }}
+          <div v-if="errors.confirmPassword" class="field-error">
+            {{ errors.confirmPassword }}
           </div>
         </div>
 
-        <div v-if="error" class="error-message">
-          {{ error }}
+        <div v-if="globalError" class="error-message">
+          {{ globalError }}
         </div>
 
         <button type="submit" class="submit-btn" :disabled="loading || !isFormValid">
@@ -80,7 +80,7 @@
 
 <script>
 export default {
-  middleware: 'guest',
+  middleware: 'register',
 
   data() {
     return {
@@ -90,140 +90,153 @@ export default {
         password: '',
         confirmPassword: ''
       },
-      validationErrors: {},
-      error: null,
+      errors: {
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+      },
+      globalError: '',
       loading: false,
       showPassword: false
     }
   },
 
+  beforeMount() {
+    // Effacer toute information d'authentification existante
+    if (process.client) {
+      localStorage.removeItem('auth._token.local');
+      localStorage.removeItem('auth.user');
+      localStorage.removeItem('auth.loggedIn');
+      
+      // Si d'autres éléments liés à l'authentification existent, les effacer aussi
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('auth.')) {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+  },
+
   computed: {
     passwordHasMinLength() {
-      return this.form.password.length >= 8
+      return this.form.password.length >= 8;
     },
 
     passwordHasUppercase() {
-      return /[A-Z]/.test(this.form.password)
+      return /[A-Z]/.test(this.form.password);
     },
 
     passwordHasNumber() {
-      return /[0-9]/.test(this.form.password)
+      return /[0-9]/.test(this.form.password);
     },
 
     isPasswordValid() {
-      return this.passwordHasMinLength &&
-        this.passwordHasUppercase &&
-        this.passwordHasNumber
+      return this.passwordHasMinLength && 
+             this.passwordHasUppercase && 
+             this.passwordHasNumber;
     },
 
     isFormValid() {
-      // Vérifier que tous les champs sont remplis
-      if (!this.form.username || !this.form.email || !this.form.password || !this.form.confirmPassword) {
-        return false;
-      }
-
-      // Vérifier que le nom d'utilisateur est valide
-      if (!/^[a-zA-Z0-9_]{3,20}$/.test(this.form.username)) {
-        return false;
-      }
-
-      // Vérifier que l'email est valide
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.form.email)) {
-        return false;
-      }
-
-      // Vérifier que le mot de passe est valide
-      if (this.form.password.length < 8) {
-        return false;
-      }
-
-      // Vérifier que les mots de passe correspondent
-      if (this.form.password !== this.form.confirmPassword) {
-        return false;
-      }
-
-      return true;
+      return this.form.username && 
+             this.form.username.trim() && 
+             this.form.email && 
+             this.form.email.trim() && 
+             this.isPasswordValid && 
+             this.form.password === this.form.confirmPassword;
     }
   },
 
   methods: {
     validateForm() {
-      this.validationErrors = {}
+      // Réinitialiser les erreurs
+      this.errors = {
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+      };
+      this.globalError = '';
 
+      let isValid = true;
+
+      // Validation du nom d'utilisateur
       if (!this.form.username.trim()) {
-        this.validationErrors.username = "Le nom d'utilisateur est requis"
+        this.errors.username = "Le nom d'utilisateur est requis";
+        isValid = false;
       } else if (!/^[a-zA-Z0-9_]{3,20}$/.test(this.form.username)) {
-        this.validationErrors.username = "Le nom d'utilisateur doit contenir entre 3 et 20 caractères (lettres, chiffres et underscore uniquement)"
+        this.errors.username = "Le nom d'utilisateur doit contenir entre 3 et 20 caractères (lettres, chiffres et underscore uniquement)";
+        isValid = false;
       }
 
+      // Validation de l'email
       if (!this.form.email.trim()) {
-        this.validationErrors.email = "L'email est requis"
+        this.errors.email = "L'email est requis";
+        isValid = false;
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.form.email)) {
-        this.validationErrors.email = "Format d'email invalide"
+        this.errors.email = "Format d'email invalide";
+        isValid = false;
       }
 
+      // Validation du mot de passe
       if (!this.form.password) {
-        this.validationErrors.password = "Le mot de passe est requis"
+        this.errors.password = "Le mot de passe est requis";
+        isValid = false;
       } else if (!this.isPasswordValid) {
-        this.validationErrors.password = "Le mot de passe ne respecte pas les critères de sécurité"
+        this.errors.password = "Le mot de passe ne respecte pas les critères de sécurité";
+        isValid = false;
       }
 
+      // Validation de la confirmation du mot de passe
       if (this.form.password !== this.form.confirmPassword) {
-        this.validationErrors.confirmPassword = "Les mots de passe ne correspondent pas"
+        this.errors.confirmPassword = "Les mots de passe ne correspondent pas";
+        isValid = false;
       }
 
-      return Object.keys(this.validationErrors).length === 0
+      return isValid;
     },
 
     async register() {
-      if (!this.isFormValid) return;
+      // Validation du formulaire
+      if (!this.validateForm()) {
+        return;
+      }
 
       this.loading = true;
+      this.globalError = '';
 
       try {
-        console.log("Données d'inscription:", {
-          username: this.form.username,
-          email: this.form.email,
-          password: this.form.password
-        });
+        // Utiliser notre système d'authentification personnalisé
+        const response = await this.$authCustom.register(
+          this.form.username,
+          this.form.email,
+          this.form.password
+        );
 
-        // Envoyer la requête d'inscription au backend
-        const response = await this.$axios.post('/auth/register', {
-          username: this.form.username,
-          email: this.form.email,
-          password: this.form.password
-        });
-
-        console.log("Réponse d'inscription:", response.data);
-
-        // Si l'inscription réussit, connecter l'utilisateur
-        if (response.data && response.data.user) {
-          // Créer un utilisateur avec les données retournées
-          const user = response.data.user;
-
-          // Stocker manuellement les informations d'authentification
-          if (response.data.token) {
-            localStorage.setItem('auth._token.local', `Bearer ${response.data.token}`);
-          } else {
-            localStorage.setItem('auth._token.local', 'Bearer fake_token_for_testing');
-          }
-
-          this.$auth.setUser(user);
-          this.$auth.$storage.setState('loggedIn', true);
-
-          this.$toast.success(`Bienvenue ${user.username} ! Votre compte a été créé avec succès.`);
-          this.$router.push('/');
-        } else {
-          this.$toast.error('Inscription réussie mais impossible de vous connecter automatiquement.');
-        }
+        // Afficher un message de succès
+          this.$toast.success(`Bienvenue ${response.user.username} ! Votre compte a été créé avec succès.`);
+          
+        // Redirection avec rechargement complet de la page
+          setTimeout(() => {
+            if (process.client) {
+              window.location.href = '/';
+            }
+          }, 500);
       } catch (error) {
         console.error("Erreur d'inscription:", error);
-
-        if (error.response && error.response.data && error.response.data.message) {
-          this.$toast.error(error.response.data.message);
+        
+        if (error.response && error.response.data) {
+          if (error.response.data.message) {
+            this.globalError = error.response.data.message;
+          } else {
+            this.globalError = "Erreur lors de l'inscription";
+          }
         } else {
-          this.$toast.error('Erreur lors de l\'inscription. Veuillez réessayer.');
+          this.globalError = "Erreur de connexion au serveur";
         }
+        
+        this.$toast.error(this.globalError);
       } finally {
         this.loading = false;
       }

@@ -189,6 +189,30 @@ const commentController = {
             console.error('Erreur lors du retrait du like:', error);
             res.status(500).json({ message: 'Erreur serveur lors du retrait du like' });
         }
+    },
+
+    // Vérifier si un utilisateur a liké un commentaire
+    async checkLike(req, res) {
+        try {
+            const commentaireId = req.params.id;
+            const utilisateurId = req.user.id;
+
+            // Vérifier si le commentaire existe
+            const commentaire = await commentModel.getById(commentaireId);
+            if (!commentaire) {
+                return res.status(404).json({ message: 'Commentaire non trouvé' });
+            }
+
+            // Vérifier le statut du like
+            const hasLiked = await commentModel.hasLiked(commentaireId, utilisateurId);
+
+            res.status(200).json({
+                hasLiked
+            });
+        } catch (error) {
+            console.error('Erreur lors de la vérification du like:', error);
+            res.status(500).json({ message: 'Erreur serveur lors de la vérification du like' });
+        }
     }
 };
 

@@ -59,8 +59,9 @@ const postController = {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
+            const excludeCategory = req.query.excludeCategory;
 
-            const posts = await postModel.getAll(page, limit);
+            const posts = await postModel.getAll(page, limit, excludeCategory);
 
             res.status(200).json({
                 message: 'Posts récupérés avec succès',
@@ -221,6 +222,23 @@ const postController = {
         }
     },
 
+    // Vérifier si l'utilisateur a liké un post
+    async checkLike(req, res) {
+        try {
+            const postId = req.params.id;
+            const utilisateurId = req.user.id;
+
+            const hasLiked = await postModel.hasLiked(postId, utilisateurId);
+
+            res.status(200).json({
+                hasLiked: hasLiked
+            });
+        } catch (error) {
+            console.error('Erreur lors de la vérification du like:', error);
+            res.status(500).json({ message: 'Erreur serveur lors de la vérification du like' });
+        }
+    },
+
     // Récupérer les posts par catégorie
     async getByCategory(req, res) {
         try {
@@ -313,29 +331,22 @@ const postController = {
     // Méthode de création de post
     async createPost(req, res) {
         try {
-            const { titre, contenu, categorie_id } = req.body;
+            const { titre, contenu, categorieId, estAnonyme } = req.body;
 
-            console.log("Tentative de création de post:", { titre, contenu, categorie_id });
+            console.log("Tentative de création de post:", { titre, contenu, categorieId, estAnonyme });
 
             // Validation des données
-            if (!titre || !contenu || !categorie_id) {
-                console.log("Données manquantes:", { titre: !!titre, contenu: !!contenu, categorie_id: !!categorie_id });
+            if (!titre || !contenu || !categorieId) {
+                console.log("Données manquantes:", { titre: !!titre, contenu: !!contenu, categorieId: !!categorieId });
                 return res.status(400).json({ message: 'Titre, contenu et catégorie sont requis' });
             }
 
-            // Puisque nous avons désactivé le middleware d'authentification,
-            // nous utilisons un utilisateur fictif pour le débogage
-            let utilisateur_id;
-            if (req.user) {
-                utilisateur_id = req.user.id;
-            } else {
-                // Utilisateur fictif pour le débogage
-                utilisateur_id = 1; // Assurez-vous que cet ID existe dans votre base de données
-                console.log("Utilisation d'un utilisateur fictif pour la création du post:", utilisateur_id);
-            }
+            // Récupérer l'utilisateur authentifié
+            const utilisateur_id = req.user.id;
+            console.log("Utilisateur authentifié:", { id: utilisateur_id, username: req.user.username });
 
             // Créer le post
-            const post = await postModel.create(titre, contenu, utilisateur_id, categorie_id);
+            const post = await postModel.create(titre, contenu, utilisateur_id, categorieId, estAnonyme || false);
             console.log("Post créé avec succès:", { id: post.id, titre: post.titre });
 
             res.status(201).json({

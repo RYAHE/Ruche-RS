@@ -63,13 +63,14 @@ export default {
 
   computed: {
     isAuthor() {
-      if (!this.$auth.loggedIn) return false
-      return this.$auth.user.id === this.post.auteur_id
+      if (!this.$authCustom.isAuthenticated()) return false
+      const user = this.$authCustom.getUser();
+      return user && user.id === this.post.auteur_id;
     }
   },
 
   async mounted() {
-    if (this.$auth.loggedIn) {
+    if (this.$authCustom.isAuthenticated()) {
       try {
         const response = await this.$axios.get(`/posts/${this.post.id}/like/check`)
         this.hasLiked = response.data.hasLiked
@@ -113,23 +114,50 @@ export default {
     },
 
     async toggleLike() {
-      if (!this.$auth.loggedIn) {
-        this.$router.push('/auth/login')
-        return
+      if (!this.$authCustom.isAuthenticated()) {
+        window.location.href = '/auth/login';
+        return;
       }
 
       try {
-        if (this.hasLiked) {
-          await this.$axios.delete(`/posts/${this.post.id}/like`)
-          this.likeCount--
-        } else {
-          await this.$axios.post(`/posts/${this.post.id}/like`)
-          this.likeCount++
+        // Récupérer le token avec notre système personnalisé
+        const token = this.$authCustom.getToken();
+        if (!token) {
+          this.$toast.error('Votre session a expiré. Veuillez vous reconnecter.');
+          setTimeout(() => {
+            window.location.href = '/auth/login';
+          }, 300);
+          return;
         }
-        this.hasLiked = !this.hasLiked
+
+        // Utiliser une instance axios isolée avec le token
+        const axios = require('axios').create({
+          baseURL: 'http://localhost:8080/api',
+          headers: {
+            'Authorization': token,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (this.hasLiked) {
+          await axios.delete(`/posts/${this.post.id}/like`);
+          this.likeCount--;
+        } else {
+          await axios.post(`/posts/${this.post.id}/like`);
+          this.likeCount++;
+        }
+        this.hasLiked = !this.hasLiked;
       } catch (error) {
-        console.error('Erreur lors de la gestion du like:', error)
-        this.$toast.error('Erreur lors de la gestion du like')
+        console.error('Erreur lors de la gestion du like:', error);
+        this.$toast.error('Erreur lors de la gestion du like');
+        
+        // Si erreur 401, rediriger vers la page de connexion
+        if (error.response && error.response.status === 401) {
+          this.$authCustom.reset();
+          setTimeout(() => {
+            window.location.href = '/auth/login';
+          }, 300);
+        }
       }
     }
   }
